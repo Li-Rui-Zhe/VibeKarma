@@ -1,0 +1,58 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "VibeKarma",
+  "version": "0.1.0",
+  "identifier": "com.vibekarma.desktop",
+  "build": {
+    "beforeDevCommand": "node node_modules/vite/bin/vite.js --host 127.0.0.1",
+    "devUrl": "http://127.0.0.1:1420",
+    "beforeBuildCommand": "node node_modules/typescript/bin/tsc -b && node node_modules/vite/bin/vite.js build",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "windows": [
+      {
+        "label": "main",
+        "title": "VibeKarma",
+        "width": 500,
+        "height": 330,
+        "minWidth": 460,
+        "minHeight": 300,
+        "center": true,
+        "resizable": true,
+        "alwaysOnTop": false
+      },
+      {
+        "label": "overlay",
+        "title": "VibeKarma Overlay",
+        "url": "index.html?overlay=1",
+        "width": 1,
+        "height": 1,
+        "visible": false,
+        "transparent": true,
+        "decorations": false,
+        "alwaysOnTop": true,
+        "skipTaskbar": true,
+        "shadow": false,
+        "resizable": false
+      }
+    ],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "category": "DeveloperTool",
+    "shortDescription": "带奖惩反馈和第一人称日记的 Codex 客户端",
+    "longDescription": "VibeKarma connects to a locally installed Codex CLI and turns feedback into warm, first-person reflection diaries.",
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ]
+  }
+}

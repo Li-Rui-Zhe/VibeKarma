@@ -1,0 +1,14 @@
+node_modules/
+dist/
+target/
+.cargo-home/
+.pnpm-store/
+.cache/
+.vibekarma-data/
+*.log
+.DS_Store
+Thumbs.db
+
+# Local reference project. Keep it untouched and out of VibeKarma releases.
+badclaude/
+
