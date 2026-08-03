@@ -20,27 +20,22 @@ async fn inspect_codex_window() -> Result<CodexWindowInfo, String> {
 }
 
 #[tauri::command]
-async fn arm_codex_overlay(app: tauri::AppHandle, kind: String) -> Result<CodexWindowInfo, String> {
-    codex_window::arm_overlay(&app, &kind).await
+async fn arm_codex_overlay(
+    app: tauri::AppHandle,
+    kind: String,
+    target: CodexWindowInfo,
+) -> Result<CodexWindowInfo, String> {
+    codex_window::arm_overlay(&app, &kind, &target)
 }
 
 #[tauri::command]
-async fn send_desktop_feedback(
+async fn record_desktop_feedback(
     manager: State<'_, Arc<CodexManager>>,
     feedback: FeedbackRequest,
 ) -> Result<FeedbackReceipt, String> {
-    let reason = feedback.reason.trim();
     let before = codex_window::inspect().await?;
-    codex_window::ensure_window(&before)?;
-    let guidance = codex::desktop_feedback_guidance(
-        feedback.kind,
-        reason,
-        feedback.note.trim(),
-        before.working,
-    );
-    codex_window::send_text(&guidance).await?;
-
-    let delivery = if before.working { "steered" } else { "newTurn" };
+    codex_window::ensure_visible_window(&before)?;
+    let delivery = "silent";
     manager.inner().clone().queue_desktop_reflection(
         &feedback,
         delivery,
@@ -149,7 +144,7 @@ pub fn run() {
             get_app_snapshot,
             inspect_codex_window,
             arm_codex_overlay,
-            send_desktop_feedback,
+            record_desktop_feedback,
             set_main_window_mode,
             hide_codex_overlay,
             save_settings,

@@ -1,13 +1,66 @@
+# Dependencies and package-manager caches (kept on D: for local development)
 node_modules/
-dist/
-target/
-.cargo-home/
 .pnpm-store/
 .cache/
+.corepack/
+.npm/
+
+# Frontend build, test, and TypeScript output
+dist/
+coverage/
+.vite/
+*.tsbuildinfo
+
+# Rust / Tauri build output and local toolchains
+target/
+.cargo-home/
+.rustup-home/
+
+# Local environment files and secrets
+.env
+.env.*
+!.env.example
+!.env.*.example
+*.local
+
+# Local application data and databases
 .vibekarma-data/
+VibeKarmaData/
+*.sqlite
+*.sqlite3
+*.sqlite-shm
+*.sqlite-wal
+*.sqlite-journal
+*.db-shm
+*.db-wal
+*.db-journal
+
+# Logs, reports, and temporary files
+output/
+tmp/
 *.log
+*.log.*
+*.pid
+*.seed
+*.tmp
+*.temp
+*.bak
+*.swp
+*.swo
+crash-report-*
+
+# Editors and IDEs
+.idea/
+.vscode/
+*.sln.iml
+
+# Operating-system metadata
 .DS_Store
+.AppleDouble
+.LSOverride
 Thumbs.db
+Desktop.ini
+$RECYCLE.BIN/
 
 # Local reference project. Keep it untouched and out of VibeKarma releases.
 badclaude/

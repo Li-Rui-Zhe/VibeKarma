@@ -45,11 +45,10 @@ export type FeedbackKind = "reward" | "correction";
 export interface FeedbackRequest {
   kind: FeedbackKind;
   reason: string;
-  note: string;
 }
 
 export interface FeedbackReceipt {
-  delivery: "steered" | "newTurn";
+  delivery: "steered" | "newTurn" | "silent";
   threadId: string;
   turnId: string | null;
   diaryQueued: boolean;

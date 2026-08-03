@@ -14,11 +14,12 @@
       {
         "label": "main",
         "title": "VibeKarma",
-        "width": 500,
-        "height": 330,
-        "minWidth": 460,
-        "minHeight": 300,
+        "width": 580,
+        "height": 400,
+        "minWidth": 520,
+        "minHeight": 360,
         "center": true,
+        "decorations": false,
         "resizable": true,
         "alwaysOnTop": false
       },

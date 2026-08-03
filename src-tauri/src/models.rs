@@ -57,8 +57,6 @@ pub struct AppSnapshot {
 pub struct FeedbackRequest {
     pub kind: FeedbackKind,
     pub reason: String,
-    #[serde(default)]
-    pub note: String,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

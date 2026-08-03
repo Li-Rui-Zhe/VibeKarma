@@ -130,17 +130,17 @@ export const backend = {
         };
   },
 
-  async armCodexOverlay(kind: FeedbackKind): Promise<CodexWindowInfo> {
+  async armCodexOverlay(kind: FeedbackKind, target: CodexWindowInfo): Promise<CodexWindowInfo> {
     return isTauriRuntime()
-      ? call<CodexWindowInfo>("arm_codex_overlay", { kind })
+      ? call<CodexWindowInfo>("arm_codex_overlay", { kind, target })
       : this.inspectCodexWindow();
   },
 
-  async sendDesktopFeedback(feedback: FeedbackRequest): Promise<FeedbackReceipt> {
+  async recordDesktopFeedback(feedback: FeedbackRequest): Promise<FeedbackReceipt> {
     return isTauriRuntime()
-      ? call<FeedbackReceipt>("send_desktop_feedback", { feedback })
+      ? call<FeedbackReceipt>("record_desktop_feedback", { feedback })
       : {
-          delivery: "newTurn",
+          delivery: "silent",
           threadId: "desktop-preview",
           turnId: null,
           diaryQueued: true,
@@ -167,6 +167,11 @@ export async function subscribeOverlayAction(
 ): Promise<UnlistenFn> {
   if (!isTauriRuntime()) return () => undefined;
   return listen<OverlayAction>("overlay-action", (event) => handler(event.payload));
+}
+
+export async function subscribeOverlayCancel(handler: () => void): Promise<UnlistenFn> {
+  if (!isTauriRuntime()) return () => undefined;
+  return listen<null>("overlay-cancel", handler);
 }
 
 export async function subscribeBackendEvents(handlers: {

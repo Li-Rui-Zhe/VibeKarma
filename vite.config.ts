@@ -5,6 +5,15 @@ export default defineConfig({
   server: {
     port: 1420,
     strictPort: true,
+    watch: {
+      ignored: [
+        "**/.cache/**",
+        "**/.cargo-home/**",
+        "**/.corepack/**",
+        "**/.pnpm-store/**",
+        "**/target/**",
+      ],
+    },
   },
   optimizeDeps: {
     entries: ["index.html"],

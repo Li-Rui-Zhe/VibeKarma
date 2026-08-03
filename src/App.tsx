@@ -1,21 +1,23 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import {
-  Award,
-  BookOpenText,
-  ChevronLeft,
   LoaderCircle,
   MessageSquareText,
+  Minus,
   RefreshCw,
   X,
 } from "lucide-react";
+import whipReference from "./assets/feedback-whip-reference.png";
 import { Brand } from "./components/Brand";
 import { DiaryBook } from "./components/DiaryBook";
-import { WhipIcon } from "./components/WhipIcon";
+import { DrawPieIcon } from "./components/DrawPieIcon";
+import { DiaryTraceIcon, WorkPulseIcon } from "./components/EditorialIcons";
 import {
   backend,
   isTauriRuntime,
   subscribeBackendEvents,
   subscribeOverlayAction,
+  subscribeOverlayCancel,
 } from "./lib/backend";
 import type {
   AppSnapshot,
@@ -27,16 +29,22 @@ import type {
 
 type View = "control" | "diary";
 
+const SNAPSHOT_TIMEOUT_MS = 5_000;
+const SNAPSHOT_ATTEMPTS = 3;
+
 function App() {
   const [snapshot, setSnapshot] = useState<AppSnapshot | null>(null);
+  const [bootError, setBootError] = useState<string | null>(null);
   const [codexWindow, setCodexWindow] = useState<CodexWindowInfo | null>(null);
   const [view, setView] = useState<View>("control");
   const [feedbackHint, setFeedbackHint] = useState("");
   const [detecting, setDetecting] = useState(true);
-  const [busy, setBusy] = useState<"overlay" | "feedback" | null>(null);
+  const [busy, setBusy] = useState<"arming" | "overlay" | "feedback" | null>(null);
   const [reflectionCount, setReflectionCount] = useState(0);
+  const [actionPulse, setActionPulse] = useState<FeedbackKind | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const feedbackHintRef = useRef("");
+  const actionPulseTimerRef = useRef<number | null>(null);
 
   const refreshWindow = useCallback(async () => {
     setDetecting(true);
@@ -49,23 +57,27 @@ function App() {
     }
   }, []);
 
+  const loadSnapshot = useCallback(async () => {
+    setBootError(null);
+    try {
+      setSnapshot(await loadSnapshotWithRetry());
+    } catch (error) {
+      setBootError(`初始化失败：${String(error)}`);
+    }
+  }, []);
+
   const deliverFeedback = useCallback(async (kind: FeedbackKind) => {
     const reason = feedbackHintRef.current.trim();
     setBusy("feedback");
     try {
-      const feedback: FeedbackRequest = { kind, reason, note: "" };
-      const receipt = await backend.sendDesktopFeedback(feedback);
+      const feedback: FeedbackRequest = { kind, reason };
+      await backend.recordDesktopFeedback(feedback);
       if (!isTauriRuntime()) {
         setSnapshot((current) => appendPreviewDiary(current, feedback));
       }
       feedbackHintRef.current = "";
       setFeedbackHint("");
-      showToast(
-        setToast,
-        receipt.delivery === "steered"
-          ? "反馈已进入当前任务，Codex 正在写日记"
-          : "反馈已发送，Codex 正在写日记",
-      );
+      showToast(setToast, "已静默留痕，Codex 正在写日记");
     } catch (error) {
       showToast(setToast, String(error));
     } finally {
@@ -76,9 +88,7 @@ function App() {
 
   useEffect(() => {
     let alive = true;
-    void backend.snapshot().then((value) => {
-      if (alive) setSnapshot(value);
-    });
+    void loadSnapshot();
     void refreshWindow();
     const timer = window.setInterval(() => {
       if (alive && view === "control") void refreshWindow();
@@ -87,17 +97,25 @@ function App() {
       alive = false;
       window.clearInterval(timer);
     };
-  }, [refreshWindow, view]);
+  }, [loadSnapshot, refreshWindow, view]);
 
   useEffect(() => {
     let alive = true;
     let unlistenOverlay: () => void = () => undefined;
+    let unlistenOverlayCancel: () => void = () => undefined;
     let unlistenBackend: () => void = () => undefined;
     void subscribeOverlayAction((action) => {
       if (!alive) return;
       void deliverFeedback(action.kind);
     }).then((unlisten) => {
       unlistenOverlay = unlisten;
+    });
+    void subscribeOverlayCancel(() => {
+      if (!alive) return;
+      setBusy(null);
+      void refreshWindow();
+    }).then((unlisten) => {
+      unlistenOverlayCancel = unlisten;
     });
     void subscribeBackendEvents({
       onSession: () => undefined,
@@ -128,29 +146,43 @@ function App() {
     return () => {
       alive = false;
       unlistenOverlay();
+      unlistenOverlayCancel();
       unlistenBackend();
     };
-  }, [deliverFeedback]);
+  }, [deliverFeedback, refreshWindow]);
 
   useEffect(() => {
     const mode = view === "diary" ? "diary" : "compact";
     void backend.setWindowMode(mode);
   }, [view]);
 
-  const status = useMemo(() => windowStatus(codexWindow, detecting), [codexWindow, detecting]);
-  const ready = Boolean(
-    codexWindow?.ok &&
-      codexWindow.found &&
-      codexWindow.editorFound &&
-      !codexWindow.editorHasDraft,
+  useEffect(
+    () => () => {
+      if (actionPulseTimerRef.current !== null) {
+        window.clearTimeout(actionPulseTimerRef.current);
+      }
+    },
+    [],
   );
 
+  const status = useMemo(() => windowStatus(codexWindow, detecting), [codexWindow, detecting]);
+  const ready = Boolean(codexWindow?.ok && codexWindow.found);
+
   const arm = async (kind: FeedbackKind) => {
-    if (!ready || busy) return;
-    setBusy("overlay");
+    if (!ready || busy || !codexWindow) return;
+    if (actionPulseTimerRef.current !== null) {
+      window.clearTimeout(actionPulseTimerRef.current);
+    }
+    setActionPulse(kind);
+    actionPulseTimerRef.current = window.setTimeout(() => {
+      setActionPulse(null);
+      actionPulseTimerRef.current = null;
+    }, kind === "correction" ? 520 : 1100);
+    setBusy("arming");
     try {
       if (isTauriRuntime()) {
-        setCodexWindow(await backend.armCodexOverlay(kind));
+        setCodexWindow(await backend.armCodexOverlay(kind, codexWindow));
+        setBusy("overlay");
       } else {
         void deliverFeedback(kind);
       }
@@ -163,46 +195,52 @@ function App() {
 
   if (!snapshot) {
     return (
-      <main className="boot-screen">
-        <Brand />
-        <LoaderCircle className="spin" size={20} />
-      </main>
+      <div className="karma-app karma-app--boot">
+        <KarmaHeader
+          view="control"
+          diaryCount={0}
+          reflectionCount={0}
+          diaryDisabled
+          onToggleView={() => undefined}
+        />
+        <main className="boot-screen">
+          {bootError ? (
+            <div className="boot-screen__error" role="alert">
+              <span>{bootError}</span>
+              <button type="button" onClick={() => void loadSnapshot()}>
+                重试
+              </button>
+            </div>
+          ) : (
+            <>
+              <LoaderCircle className="spin" size={20} />
+              <span>正在连接 Codex</span>
+            </>
+          )}
+        </main>
+      </div>
     );
   }
 
   return (
     <div className={`karma-app karma-app--${view}`}>
-      <header className="karma-header">
-        {view === "diary" ? (
-          <button className="icon-button" type="button" onClick={() => setView("control")} title="返回">
-            <ChevronLeft size={19} />
-          </button>
-        ) : (
-          <Brand />
-        )}
-        <div className="karma-header__title">
-          {view === "diary" && <strong>Codex 的反省日记</strong>}
-        </div>
-        <button
-          className={`diary-command ${view === "diary" ? "is-active" : ""}`}
-          type="button"
-          onClick={() => setView(view === "diary" ? "control" : "diary")}
-          title="反省日记"
-          aria-label={`反省日记，${snapshot.diaries.length} 篇`}
-        >
-          <BookOpenText size={18} />
-          <span>{snapshot.diaries.length}</span>
-        </button>
-      </header>
+      <KarmaHeader
+        view={view}
+        diaryCount={snapshot.diaries.length}
+        reflectionCount={reflectionCount}
+        onToggleView={() => setView(view === "diary" ? "control" : "diary")}
+      />
 
       {view === "control" ? (
         <main className="control-view">
           <section className={`codex-status codex-status--${status.tone}`}>
             <span className="codex-status__signal" aria-hidden="true" />
-            <div>
+            <div className="codex-status__copy">
+              <small>当前任务</small>
               <strong>{status.title}</strong>
               <span>{status.detail}</span>
             </div>
+            <WorkPulseIcon />
             <button
               className="icon-button icon-button--quiet"
               type="button"
@@ -244,22 +282,39 @@ function App() {
 
           <section className="karma-actions" aria-label="反馈操作">
             <button
-              className="karma-action karma-action--correction"
+              className={`karma-action karma-action--correction ${actionPulse === "correction" ? "is-activated" : ""}`}
               type="button"
               onClick={() => void arm("correction")}
               disabled={!ready || busy !== null}
             >
-              <span className="karma-action__icon"><WhipIcon /></span>
-              <span><strong>鞭一下</strong><small>纠正方向</small></span>
+              <span className="karma-action__icon has-reference-asset">
+                <img
+                  className="karma-action__asset karma-action__asset--correction"
+                  src={whipReference}
+                  alt=""
+                  aria-hidden="true"
+                />
+              </span>
+              <span className="karma-action__copy">
+                <small className="karma-action__eyebrow">CORRECT</small>
+                <strong>鞭策一下</strong>
+                <small>纠正方向</small>
+              </span>
             </button>
             <button
-              className="karma-action karma-action--reward"
+              className={`karma-action karma-action--reward ${actionPulse === "reward" ? "is-activated" : ""}`}
               type="button"
               onClick={() => void arm("reward")}
               disabled={!ready || busy !== null}
             >
-              <span className="karma-action__icon"><Award size={31} /></span>
-              <span><strong>奖一下</strong><small>留下肯定</small></span>
+              <span className="karma-action__icon">
+                <DrawPieIcon />
+              </span>
+              <span className="karma-action__copy">
+                <small className="karma-action__eyebrow">REWARD</small>
+                <strong>奖励一下</strong>
+                <small>画个大饼，现场兑现</small>
+              </span>
             </button>
           </section>
 
@@ -268,13 +323,23 @@ function App() {
             {(busy || reflectionCount > 0) && (
               <span className="armed-state">
                 <LoaderCircle className="spin" size={13} />
-                {reflectionCount > 0 ? "Codex 正在写日记" : busy === "overlay" ? "已就绪" : "正在发送"}
+                {reflectionCount > 0
+                  ? "Codex 正在写日记"
+                  : busy === "arming"
+                    ? "正在打开动效"
+                    : busy === "overlay"
+                      ? "请在 Codex 上点击"
+                      : "正在留痕"}
               </span>
             )}
           </footer>
         </main>
       ) : (
-        <DiaryBook diaries={snapshot.diaries} dataDir={snapshot.dataDir} />
+        <DiaryBook
+          diaries={snapshot.diaries}
+          dataDir={snapshot.dataDir}
+          onBack={() => setView("control")}
+        />
       )}
 
       {toast && <div className="toast" role="status">{toast}</div>}
@@ -282,17 +347,208 @@ function App() {
   );
 }
 
+interface KarmaHeaderProps {
+  view: View;
+  diaryCount: number;
+  reflectionCount: number;
+  diaryDisabled?: boolean;
+  onToggleView: () => void;
+}
+
+function KarmaHeader({
+  view,
+  diaryCount,
+  reflectionCount,
+  diaryDisabled = false,
+  onToggleView,
+}: KarmaHeaderProps) {
+  const handleDragRegionDoubleClick = (target: EventTarget | null) => {
+    if (target instanceof HTMLElement && target.closest("button")) return;
+    void toggleMainWindowMaximize();
+  };
+
+  if (view === "diary") {
+    return (
+      <header className="karma-header karma-header--diary">
+        <div
+          className="diary-titlebar__brand"
+          data-tauri-drag-region
+          onDoubleClick={(event) => handleDragRegionDoubleClick(event.target)}
+        >
+          <Brand compact />
+          <span>VibeKarma</span>
+        </div>
+        <div
+          className="karma-header__drag-region"
+          data-tauri-drag-region
+          onDoubleClick={(event) => handleDragRegionDoubleClick(event.target)}
+        />
+        <WindowControls />
+      </header>
+    );
+  }
+
+  return (
+    <header className="karma-header karma-header--control">
+      <div
+        className="karma-header__leading"
+        data-tauri-drag-region
+        onDoubleClick={(event) => handleDragRegionDoubleClick(event.target)}
+      >
+        <Brand />
+      </div>
+      <div
+        className="karma-header__drag-region"
+        data-tauri-drag-region
+        onDoubleClick={(event) => handleDragRegionDoubleClick(event.target)}
+      />
+      <button
+        className={`diary-command ${reflectionCount > 0 ? "is-writing" : ""}`}
+        type="button"
+        onClick={onToggleView}
+        disabled={diaryDisabled}
+        title="反省日记"
+        aria-label={`反省日记，${diaryCount} 篇`}
+      >
+        <DiaryTraceIcon />
+        <span className="diary-command__label">反省日记</span>
+        <span className="diary-command__count">{diaryCount}</span>
+      </button>
+      <WindowControls />
+    </header>
+  );
+}
+
+function WindowControls() {
+  const [isMaximized, setIsMaximized] = useState(false);
+
+  useEffect(() => {
+    if (!isTauriRuntime()) return undefined;
+    const appWindow = getCurrentWindow();
+    let unlisten: () => void = () => undefined;
+    let alive = true;
+
+    const syncMaximizedState = async () => {
+      try {
+        const maximized = await appWindow.isMaximized();
+        if (alive) setIsMaximized(maximized);
+      } catch (error) {
+        if (alive) console.error("无法读取窗口状态", error);
+      }
+    };
+
+    void syncMaximizedState();
+    void appWindow.onResized(() => {
+      void syncMaximizedState();
+    }).then((stopListening) => {
+      if (alive) {
+        unlisten = stopListening;
+      } else {
+        stopListening();
+      }
+    });
+
+    return () => {
+      alive = false;
+      unlisten();
+    };
+  }, []);
+
+  return (
+    <div className="window-controls" aria-label="窗口控制">
+      <button
+        className="window-control"
+        type="button"
+        onClick={() => void minimizeMainWindow()}
+        title="最小化"
+        aria-label="最小化窗口"
+      >
+        <Minus size={17} strokeWidth={1.7} />
+      </button>
+      <button
+        className="window-control"
+        type="button"
+        onClick={() => void toggleMainWindowMaximize().then((maximized) => {
+          if (maximized !== undefined) setIsMaximized(maximized);
+        })}
+        title={isMaximized ? "还原" : "最大化"}
+        aria-label={isMaximized ? "还原窗口" : "最大化窗口"}
+      >
+        <span className={`window-control__maximize ${isMaximized ? "is-restore" : ""}`} aria-hidden="true" />
+      </button>
+      <button
+        className="window-control window-control--close"
+        type="button"
+        onClick={() => void closeMainWindow()}
+        title="关闭"
+        aria-label="关闭窗口"
+      >
+        <X size={18} strokeWidth={1.7} />
+      </button>
+    </div>
+  );
+}
+
+async function minimizeMainWindow() {
+  if (!isTauriRuntime()) return;
+  try {
+    await getCurrentWindow().minimize();
+  } catch (error) {
+    console.error("无法最小化窗口", error);
+  }
+}
+
+async function toggleMainWindowMaximize() {
+  if (!isTauriRuntime()) return;
+  try {
+    const appWindow = getCurrentWindow();
+    await appWindow.toggleMaximize();
+    return await appWindow.isMaximized();
+  } catch (error) {
+    console.error("无法切换窗口大小", error);
+  }
+}
+
+async function closeMainWindow() {
+  if (!isTauriRuntime()) return;
+  try {
+    await getCurrentWindow().close();
+  } catch (error) {
+    console.error("无法关闭窗口", error);
+  }
+}
+
+async function loadSnapshotWithRetry(): Promise<AppSnapshot> {
+  let lastError: unknown = new Error("无法读取应用状态");
+  for (let attempt = 0; attempt < SNAPSHOT_ATTEMPTS; attempt += 1) {
+    try {
+      return await withTimeout(backend.snapshot(), SNAPSHOT_TIMEOUT_MS);
+    } catch (error) {
+      lastError = error;
+      if (attempt < SNAPSHOT_ATTEMPTS - 1) {
+        await new Promise((resolve) => window.setTimeout(resolve, 300));
+      }
+    }
+  }
+  throw lastError;
+}
+
+async function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
+  let timer = 0;
+  const timeout = new Promise<never>((_, reject) => {
+    timer = window.setTimeout(() => reject(new Error("读取应用状态超时")), timeoutMs);
+  });
+  try {
+    return await Promise.race([promise, timeout]);
+  } finally {
+    window.clearTimeout(timer);
+  }
+}
+
 function windowStatus(info: CodexWindowInfo | null, detecting: boolean) {
   if (detecting && !info) return { tone: "checking", title: "正在寻找 Codex", detail: "检查桌面窗口" };
   if (!info?.found) return { tone: "offline", title: "没有找到 Codex", detail: "请先打开 Codex 桌面客户端" };
-  if (!info.ok || !info.editorFound) {
-    return { tone: "warning", title: "Codex 暂不可操作", detail: "窗口已找到，但输入框还未出现" };
-  }
-  if (info.editorHasDraft) {
-    return { tone: "warning", title: "Codex 输入框有草稿", detail: "请先发送或清空尚未发送的内容" };
-  }
-  if (info.working) return { tone: "working", title: "Codex 正在工作", detail: "反馈会进入当前任务" };
-  return { tone: "ready", title: "Codex 已就绪", detail: "反馈会作为一条新消息发送" };
+  return { tone: "ready", title: "Codex 已就绪", detail: "动效结束后会静默写入日记" };
 }
 
 function emptyWindow(error: string): CodexWindowInfo {
