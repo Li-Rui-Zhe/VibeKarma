@@ -118,12 +118,9 @@ function App() {
       unlistenOverlayCancel = unlisten;
     });
     void subscribeBackendEvents({
-      onSession: () => undefined,
-      onCodex: () => undefined,
       onDiaryStart: () => {
         if (alive) setReflectionCount((count) => count + 1);
       },
-      onRequest: () => undefined,
       onLog: (log) => {
         if (alive && log.level === "error") {
           if (log.message.includes("日记")) setReflectionCount(0);

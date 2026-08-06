@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 import type { DiaryEntry } from "../types";
-import { buildBookSheets, paginateDiaryBody } from "./DiaryBook";
+import {
+  buildBookSheets,
+  getBookProgress,
+  getFirstContentSpreadPage,
+  getLastContentSpreadPage,
+  paginateDiaryBody,
+} from "./DiaryBook";
 
 function diary(id: string, body = "今天只记这一小段。"): DiaryEntry {
   return {
@@ -78,9 +84,50 @@ describe("diary book pagination", () => {
       type: "diary",
       diary: { id: "刚写" },
     });
-    expect(layout.sheets.at(-1)).toMatchObject({
+    expect(layout.sheets.filter((sheet) => sheet.type === "diary").at(-1)).toMatchObject({
       type: "diary",
       diary: { id: "刚写" },
     });
+  });
+
+  it("keeps both covers and flyleaves out of diary page numbering", () => {
+    const layout = buildBookSheets([diary("更早"), diary("之前"), diary("刚写")]);
+    const diarySheets = layout.sheets.filter((sheet) => sheet.type === "diary");
+
+    expect(diarySheets.map((sheet) => sheet.pageNumber)).toEqual([1, 2, 3]);
+    expect(layout.contentPageCount).toBe(3);
+    expect(layout.physicalPageCount).toBe(layout.sheets.length + 2);
+    expect(getBookProgress(layout, 0)).toBeNull();
+    expect(getBookProgress(layout, layout.physicalPageCount - 1)).toBeNull();
+  });
+
+  it("adds an unnumbered back flyleaf so the back cover closes by itself", () => {
+    const layout = buildBookSheets([diary("一篇写了两页")], () => ["第一页", "第二页"]);
+    const backCoverPage = layout.physicalPageCount - 1;
+
+    expect(backCoverPage % 2).toBe(1);
+    expect(layout.sheets.at(-1)).toMatchObject({ type: "blank" });
+    expect(getBookProgress(layout, layout.latestPage)).toEqual({ current: 2, total: 2 });
+  });
+
+  it("jumps to the first content spread instead of the front cover", () => {
+    const withFlyleaf = buildBookSheets([diary("更早"), diary("之前"), diary("刚写")]);
+    const withoutFlyleaf = buildBookSheets([diary("更早"), diary("刚写")]);
+    const empty = buildBookSheets([]);
+
+    expect(getFirstContentSpreadPage(withFlyleaf)).toBe(1);
+    expect(getFirstContentSpreadPage(withoutFlyleaf)).toBe(1);
+    expect(getFirstContentSpreadPage(empty)).toBeNull();
+  });
+
+  it("jumps to the last content spread instead of the back cover", () => {
+    const onePage = buildBookSheets([diary("唯一一篇")]);
+    const twoPages = buildBookSheets([diary("一篇写了两页")], () => ["第一页", "第二页"]);
+    const empty = buildBookSheets([]);
+
+    expect(getLastContentSpreadPage(onePage)).toBe(1);
+    expect(getLastContentSpreadPage(twoPages)).toBe(3);
+    expect(getLastContentSpreadPage(twoPages)).toBeLessThan(twoPages.physicalPageCount - 1);
+    expect(getLastContentSpreadPage(empty)).toBeNull();
   });
 });

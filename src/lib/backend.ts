@@ -4,15 +4,12 @@ import type {
   AppSettings,
   AppSnapshot,
   CodexLogEvent,
-  CodexUiEvent,
   CodexWindowInfo,
   DiaryEntry,
   FeedbackReceipt,
   FeedbackRequest,
   FeedbackKind,
   OverlayAction,
-  ServerRequestEvent,
-  SessionSnapshot,
 } from "../types";
 
 declare global {
@@ -54,22 +51,9 @@ const demoDiaries: DiaryEntry[] = [
 
 const demoSnapshot: AppSnapshot = {
   settings: {
-    workspace: "C:\\Users\\admin\\Desktop\\VibeKarma",
     codexPath: null,
     codexHome: null,
     extraEnv: {},
-    sandbox: "workspace-write",
-    approvalPolicy: "on-request",
-    lastThreadId: "demo-thread",
-    lastThreadWorkspace: "C:\\Users\\admin\\Desktop\\VibeKarma",
-  },
-  session: {
-    connected: true,
-    status: "idle",
-    threadId: "demo-thread",
-    activeTurnId: null,
-    workspace: "C:\\Users\\admin\\Desktop\\VibeKarma",
-    lastError: null,
   },
   diaries: demoDiaries,
   dataDir: "D:\\VibeKarmaData",
@@ -86,29 +70,6 @@ export const backend = {
 
   async saveSettings(settings: AppSettings): Promise<AppSettings> {
     return isTauriRuntime() ? call<AppSettings>("save_settings", { settings }) : settings;
-  },
-
-  async connect(): Promise<SessionSnapshot> {
-    return isTauriRuntime() ? call<SessionSnapshot>("connect_codex") : demoSnapshot.session;
-  },
-
-  async disconnect(): Promise<void> {
-    if (isTauriRuntime()) await call<void>("disconnect_codex");
-  },
-
-  async sendMessage(text: string): Promise<unknown> {
-    return isTauriRuntime() ? call("send_user_message", { text }) : { text };
-  },
-
-  async sendFeedback(feedback: FeedbackRequest): Promise<FeedbackReceipt> {
-    return isTauriRuntime()
-      ? call<FeedbackReceipt>("send_feedback", { feedback })
-      : {
-          delivery: demoSnapshot.session.activeTurnId ? "steered" : "newTurn",
-          threadId: "demo-thread",
-          turnId: "demo-feedback-turn",
-          diaryQueued: true,
-        };
   },
 
   async inspectCodexWindow(): Promise<CodexWindowInfo> {
@@ -151,15 +112,6 @@ export const backend = {
     if (isTauriRuntime()) await call<void>("set_main_window_mode", { mode });
   },
 
-  async interrupt(): Promise<void> {
-    if (isTauriRuntime()) await call<void>("interrupt_turn");
-  },
-
-  async respond(requestId: string | number, result: unknown): Promise<void> {
-    if (isTauriRuntime()) {
-      await call<void>("respond_to_server_request", { requestId, result });
-    }
-  },
 };
 
 export async function subscribeOverlayAction(
@@ -175,20 +127,14 @@ export async function subscribeOverlayCancel(handler: () => void): Promise<Unlis
 }
 
 export async function subscribeBackendEvents(handlers: {
-  onSession: (payload: SessionSnapshot) => void;
-  onCodex: (payload: CodexUiEvent) => void;
   onDiary: (payload: DiaryEntry) => void;
   onDiaryStart: (kind: string) => void;
-  onRequest: (payload: ServerRequestEvent) => void;
   onLog: (payload: CodexLogEvent) => void;
 }): Promise<UnlistenFn> {
   if (!isTauriRuntime()) return () => undefined;
   const unlisteners = await Promise.all([
-    listen<SessionSnapshot>("session-state", (event) => handlers.onSession(event.payload)),
-    listen<CodexUiEvent>("codex-event", (event) => handlers.onCodex(event.payload)),
     listen<DiaryEntry>("diary-created", (event) => handlers.onDiary(event.payload)),
     listen<string>("diary-generation-started", (event) => handlers.onDiaryStart(event.payload)),
-    listen<ServerRequestEvent>("codex-server-request", (event) => handlers.onRequest(event.payload)),
     listen<CodexLogEvent>("codex-log", (event) => handlers.onLog(event.payload)),
   ]);
   return () => unlisteners.forEach((unlisten) => unlisten());

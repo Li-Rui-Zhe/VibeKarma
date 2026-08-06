@@ -22,12 +22,19 @@ target/
 !.env.example
 !.env.*.example
 *.local
+*.pem
+*.key
+*.p12
+*.pfx
+id_rsa*
+id_ed25519*
 
 # Local application data and databases
 .vibekarma-data/
 VibeKarmaData/
 *.sqlite
 *.sqlite3
+*.db
 *.sqlite-shm
 *.sqlite-wal
 *.sqlite-journal
@@ -36,8 +43,8 @@ VibeKarmaData/
 *.db-journal
 
 # Logs, reports, and temporary files
-output/
-tmp/
+/output/
+/tmp/
 *.log
 *.log.*
 *.pid
@@ -63,5 +70,5 @@ Desktop.ini
 $RECYCLE.BIN/
 
 # Local reference project. Keep it untouched and out of VibeKarma releases.
-badclaude/
+/badclaude/
 

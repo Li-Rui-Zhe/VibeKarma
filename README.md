@@ -68,7 +68,7 @@ VibeKarma 是一个用 Tauri 2、React 19 和 Rust 构建的 Codex 桌面伴侣�
 - 已安装并可正常运行的 Codex CLI。
 - 已打开且可见的 Codex 桌面客户端窗口。
 
-VibeKarma 不保存 OpenAI API Key。日记进程继承本机 Codex CLI 已有的登录、Provider 和 `CODEX_HOME` 配置，也可以在应用设置中指定 Codex 可执行文件、独立 `CODEX_HOME` 或额外环境变量。
+VibeKarma 不保存 OpenAI API Key。日记进程继承本机 Codex CLI 已有的登录、Provider 和 `CODEX_HOME` 配置；本地 `settings.json` 也可以指定 Codex 可执行文件、独立 `CODEX_HOME` 或额外环境变量。
 
 ## 本地开发
 

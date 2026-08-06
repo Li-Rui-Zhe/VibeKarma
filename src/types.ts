@@ -1,23 +1,7 @@
-export type SessionStatus = "disconnected" | "connecting" | "idle" | "working" | "error";
-
 export interface AppSettings {
-  workspace: string | null;
   codexPath: string | null;
   codexHome: string | null;
   extraEnv: Record<string, string>;
-  sandbox: "read-only" | "workspace-write" | "danger-full-access";
-  approvalPolicy: "untrusted" | "on-request" | "never";
-  lastThreadId: string | null;
-  lastThreadWorkspace: string | null;
-}
-
-export interface SessionSnapshot {
-  connected: boolean;
-  status: SessionStatus;
-  threadId: string | null;
-  activeTurnId: string | null;
-  workspace: string | null;
-  lastError: string | null;
 }
 
 export interface DiaryEntry {
@@ -35,7 +19,6 @@ export interface DiaryEntry {
 
 export interface AppSnapshot {
   settings: AppSettings;
-  session: SessionSnapshot;
   diaries: DiaryEntry[];
   dataDir: string;
 }
@@ -48,7 +31,7 @@ export interface FeedbackRequest {
 }
 
 export interface FeedbackReceipt {
-  delivery: "steered" | "newTurn" | "silent";
+  delivery: "silent";
   threadId: string;
   turnId: string | null;
   diaryQueued: boolean;
@@ -75,35 +58,7 @@ export interface OverlayAction {
   y: number;
 }
 
-export interface CodexUiEvent {
-  method: string;
-  params: Record<string, unknown>;
-}
-
 export interface CodexLogEvent {
   level: string;
   message: string;
-}
-
-export interface ServerRequestEvent {
-  requestId: string | number;
-  method: string;
-  params: Record<string, unknown>;
-}
-
-export interface ChatMessage {
-  id: string;
-  role: "user" | "assistant";
-  text: string;
-  timestamp: string;
-  streaming?: boolean;
-}
-
-export interface ActivityItem {
-  id: string;
-  type: "command" | "file" | "tool" | "search" | "system";
-  title: string;
-  detail: string;
-  status: "running" | "completed" | "failed" | "waiting";
-  timestamp: string;
 }

@@ -1,53 +1,29 @@
 use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AppSettings {
-    pub workspace: Option<String>,
     pub codex_path: Option<String>,
     pub codex_home: Option<String>,
     #[serde(default)]
     pub extra_env: BTreeMap<String, String>,
-    pub sandbox: String,
-    pub approval_policy: String,
-    pub last_thread_id: Option<String>,
-    pub last_thread_workspace: Option<String>,
 }
 
 impl Default for AppSettings {
     fn default() -> Self {
         Self {
-            workspace: None,
             codex_path: None,
             codex_home: None,
             extra_env: BTreeMap::new(),
-            sandbox: "workspace-write".to_owned(),
-            approval_policy: "on-request".to_owned(),
-            last_thread_id: None,
-            last_thread_workspace: None,
         }
     }
-}
-
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct SessionSnapshot {
-    pub connected: bool,
-    pub status: String,
-    pub thread_id: Option<String>,
-    pub active_turn_id: Option<String>,
-    pub workspace: Option<String>,
-    pub last_error: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AppSnapshot {
     pub settings: AppSettings,
-    pub session: SessionSnapshot,
     pub diaries: Vec<DiaryEntry>,
     pub data_dir: String,
 }
@@ -116,21 +92,6 @@ pub struct DiaryDraft {
     pub thread_id: Option<String>,
     pub turn_id: Option<String>,
     pub generated_by_codex: bool,
-}
-
-#[derive(Debug, Clone, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct CodexUiEvent {
-    pub method: String,
-    pub params: Value,
-}
-
-#[derive(Debug, Clone, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ServerRequestEvent {
-    pub request_id: Value,
-    pub method: String,
-    pub params: Value,
 }
 
 #[derive(Debug, Clone, Serialize)]

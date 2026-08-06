@@ -1,5 +1,12 @@
 import { forwardRef, useEffect, useMemo, useRef, useState } from "react";
-import { BookOpenText, ChevronLeft, ChevronRight, Feather } from "lucide-react";
+import {
+  BookOpenText,
+  ChevronLeft,
+  ChevronRight,
+  ChevronsLeft,
+  ChevronsRight,
+  Feather,
+} from "lucide-react";
 import HTMLFlipBook from "react-pageflip";
 import ReactMarkdown from "react-markdown";
 import diaryBackCover from "../assets/diary-cover-back.png";
@@ -18,6 +25,7 @@ interface DiarySheet {
   partIndex: number;
   hasNextPart: boolean;
   variant: DiaryVariant;
+  pageNumber: number;
 }
 
 interface BlankSheet {
@@ -37,7 +45,17 @@ interface FlipBookHandle {
   pageFlip: () => {
     flipNext: (corner?: "top" | "bottom") => void;
     flipPrev: (corner?: "top" | "bottom") => void;
+    turnToPage: (page: number) => void;
   };
+}
+
+interface BookLayout {
+  sheets: BookSheet[];
+  latestPage: number;
+  openSpreadLeftPage: number;
+  contentPageCount: number;
+  physicalPageCount: number;
+  key: string;
 }
 
 interface DiaryBookProps {
@@ -64,7 +82,9 @@ export function DiaryBook({ diaries, dataDir: _dataDir, onBack }: DiaryBookProps
   );
   const estimatedBookLayout = useMemo(() => buildBookSheets(filtered), [filtered]);
   const [bookLayout, setBookLayout] = useState(estimatedBookLayout);
-  const pageCount = filtered.length ? bookLayout.sheets.length + 2 : 3;
+  const progress = getBookProgress(bookLayout, currentPage);
+  const firstContentPage = getFirstContentSpreadPage(bookLayout);
+  const lastContentPage = getLastContentSpreadPage(bookLayout);
 
   useEffect(() => {
     let cancelled = false;
@@ -182,14 +202,14 @@ export function DiaryBook({ diaries, dataDir: _dataDir, onBack }: DiaryBookProps
             </DiaryPage>
 
             {filtered.length ? (
-              bookLayout.sheets.map((sheet, sheetIndex) =>
+              bookLayout.sheets.map((sheet) =>
                 sheet.type === "blank" ? (
                   <DiaryPage variant="blank" key={sheet.id} />
                 ) : (
                   <DiaryPage
                     diary={sheet.diary}
                     body={sheet.body}
-                    number={sheetIndex + 1}
+                    number={sheet.pageNumber}
                     partIndex={sheet.partIndex}
                     hasNextPart={sheet.hasNextPart}
                     variant={sheet.variant}
@@ -197,12 +217,13 @@ export function DiaryBook({ diaries, dataDir: _dataDir, onBack }: DiaryBookProps
                   />
                 ),
               )
-            ) : (
-              <DiaryPage variant="empty">
-                <Feather size={32} />
-                <h2>这一页还是空白</h2>
-              </DiaryPage>
-            )}
+            ) : ([
+                <DiaryPage variant="empty" key="empty-diary-page">
+                  <Feather size={32} />
+                  <h2>这一页还是空白</h2>
+                </DiaryPage>,
+                <DiaryPage variant="blank" key="empty-back-flyleaf" />,
+              ])}
 
             <DiaryPage variant="back">
               <img
@@ -218,7 +239,7 @@ export function DiaryBook({ diaries, dataDir: _dataDir, onBack }: DiaryBookProps
             className="book-nav book-nav--next"
             type="button"
             onClick={() => bookRef.current?.pageFlip().flipNext("top")}
-            disabled={currentPage >= pageCount - 1}
+            disabled={currentPage >= bookLayout.physicalPageCount - 1}
             aria-label="下一页"
             title="下一页"
           >
@@ -228,11 +249,41 @@ export function DiaryBook({ diaries, dataDir: _dataDir, onBack }: DiaryBookProps
 
         <footer className="book-shell__footer">
           <span className="book-shell__ribbon book-shell__ribbon--reward" aria-hidden="true" />
+          <button
+            className="book-page-jump book-first-page"
+            type="button"
+            onClick={() => {
+              if (firstContentPage === null) return;
+              bookRef.current?.pageFlip().turnToPage(firstContentPage);
+              setCurrentPage(firstContentPage);
+            }}
+            disabled={firstContentPage === null || currentPage === firstContentPage}
+            aria-label="跳转到第一面正文"
+            title="跳转到第一面正文"
+          >
+            <ChevronsLeft size={14} />
+            <span>第一页</span>
+          </button>
           <div className="book-progress">
             <span />
-            <strong>{Math.min(currentPage + 1, pageCount)} / {pageCount}</strong>
+            <strong aria-live="polite">{progress ? `${progress.current} / ${progress.total}` : ""}</strong>
             <span />
           </div>
+          <button
+            className="book-page-jump book-last-page"
+            type="button"
+            onClick={() => {
+              if (lastContentPage === null) return;
+              bookRef.current?.pageFlip().turnToPage(lastContentPage);
+              setCurrentPage(lastContentPage);
+            }}
+            disabled={lastContentPage === null || currentPage === lastContentPage}
+            aria-label="跳转到最后一面正文"
+            title="跳转到最后一面正文"
+          >
+            <span>最后一页</span>
+            <ChevronsRight size={14} />
+          </button>
           <span className="book-shell__ribbon book-shell__ribbon--correction" aria-hidden="true" />
         </footer>
       </div>
@@ -301,12 +352,14 @@ const DiaryPage = forwardRef<HTMLDivElement, DiaryPageProps>(function DiaryPage(
 export function buildBookSheets(
   diaries: DiaryEntry[],
   paginator: (diary: DiaryEntry) => string[] = (diary) => paginateDiaryBody(diary.body),
-) {
+): BookLayout {
   if (!diaries.length) {
     return {
       sheets: [] as BookSheet[],
       latestPage: 1,
       openSpreadLeftPage: 1,
+      contentPageCount: 0,
+      physicalPageCount: 4,
       key: "empty",
     };
   }
@@ -326,6 +379,7 @@ export function buildBookSheets(
       partIndex,
       hasNextPart: partIndex < parts.length - 1,
       variant,
+      pageNumber: 0,
     }));
   });
 
@@ -346,15 +400,71 @@ export function buildBookSheets(
     latestSheetIndex += 1;
   }
 
+  let contentPageCount = 0;
+  for (const sheet of sheets) {
+    if (sheet.type === "diary") {
+      contentPageCount += 1;
+      sheet.pageNumber = contentPageCount;
+    }
+  }
+
+  // showCover 只会在封底位于奇数物理索引时把它单独合上。
+  // 正文张数为奇数时补一张不编号的后衬页，避免封底与最后一页正文并排出现。
+  if (sheets.length % 2 !== 0) {
+    sheets.push({
+      type: "blank",
+      id: `back-flyleaf-${diaries.at(-1)?.id ?? "diary"}`,
+    });
+  }
+
   const latestPage = latestSheetIndex + 1;
   return {
     sheets,
     latestPage,
     openSpreadLeftPage: Math.max(1, latestPage - 1),
+    contentPageCount,
+    physicalPageCount: sheets.length + 2,
     key: diaries.map((diary) => diary.id).join("-") + "-" + sheets.map((sheet) => (
       sheet.type === "diary" ? sheet.body.length : "blank"
     )).join("-"),
   };
+}
+
+export function getBookProgress(layout: BookLayout, physicalPage: number) {
+  const backCoverPage = layout.physicalPageCount - 1;
+  if (layout.contentPageCount === 0 || physicalPage <= 0 || physicalPage >= backCoverPage) {
+    return null;
+  }
+
+  const visibleNumbers = [physicalPage, physicalPage + 1]
+    .map((page) => layout.sheets[page - 1])
+    .filter((sheet): sheet is DiarySheet => sheet?.type === "diary")
+    .map((sheet) => sheet.pageNumber);
+  if (!visibleNumbers.length) return null;
+
+  return {
+    current: Math.max(...visibleNumbers),
+    total: layout.contentPageCount,
+  };
+}
+
+export function getFirstContentSpreadPage(layout: BookLayout) {
+  const sheetIndex = layout.sheets.findIndex((sheet) => sheet.type === "diary");
+  if (sheetIndex < 0) return null;
+
+  const physicalPage = sheetIndex + 1;
+  return physicalPage % 2 === 0 ? physicalPage - 1 : physicalPage;
+}
+
+export function getLastContentSpreadPage(layout: BookLayout) {
+  let sheetIndex = layout.sheets.length - 1;
+  while (sheetIndex >= 0 && layout.sheets[sheetIndex]?.type !== "diary") {
+    sheetIndex -= 1;
+  }
+  if (sheetIndex < 0) return null;
+
+  const physicalPage = sheetIndex + 1;
+  return physicalPage % 2 === 0 ? physicalPage - 1 : physicalPage;
 }
 
 export function paginateDiaryBody(body: string): string[] {

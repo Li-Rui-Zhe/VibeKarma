@@ -3,6 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { emit, listen } from "@tauri-apps/api/event";
 import rewardFlatbread from "./assets/reward-flatbread.png";
 import { WhipPhysics, type WhipPhase } from "./components/WhipPhysics";
+import { buildRewardShape, type RewardShape } from "./lib/rewardShape";
 import type { FeedbackKind, OverlayAction } from "./types";
 
 interface Impact {
@@ -16,16 +17,23 @@ interface Point {
   y: number;
 }
 
-interface RewardReveal {
+interface RewardReveal extends RewardShape {
   x: number;
   y: number;
-  size: number;
 }
 
 interface WhipHit extends Point {
   id: string;
   angle: number;
   intensity: number;
+}
+
+interface PencilScratchTone {
+  context: AudioContext;
+  source: AudioBufferSourceNode;
+  filter: BiquadFilterNode;
+  gain: GainNode;
+  stopped: boolean;
 }
 
 export function OverlayApp() {
@@ -48,8 +56,12 @@ export function OverlayApp() {
   const finishing = useRef(false);
   const finishTimer = useRef<number | null>(null);
   const actionVersion = useRef(0);
+  const pencilScratch = useRef<PencilScratchTone | null>(null);
+  const lastPencilSoundAt = useRef(0);
 
   const resetReward = useCallback(() => {
+    stopPencilScratchTone(pencilScratch.current);
+    pencilScratch.current = null;
     drawingRef.current = [];
     setDrawing(false);
     setRewardPath([]);
@@ -153,6 +165,9 @@ export function OverlayApp() {
     event.currentTarget.setPointerCapture(event.pointerId);
     const start = { x: event.clientX, y: event.clientY };
     drawingRef.current = [start];
+    stopPencilScratchTone(pencilScratch.current);
+    pencilScratch.current = startPencilScratchTone();
+    lastPencilSoundAt.current = event.timeStamp;
     setRewardPath([start]);
     setDrawing(true);
     setDrawHint("继续画，松手就兑现");
@@ -171,7 +186,11 @@ export function OverlayApp() {
     }
     if (kind !== "reward" || !drawing || finishing.current) return;
     const last = drawingRef.current[drawingRef.current.length - 1];
-    if (last && Math.hypot(next.x - last.x, next.y - last.y) < 4) return;
+    const distance = last ? Math.hypot(next.x - last.x, next.y - last.y) : 0;
+    if (last && distance < 4) return;
+    const elapsed = Math.max(8, event.timeStamp - lastPencilSoundAt.current);
+    updatePencilScratchTone(pencilScratch.current, distance / elapsed);
+    lastPencilSoundAt.current = event.timeStamp;
     drawingRef.current = [...drawingRef.current, next];
     setRewardPath(drawingRef.current);
   };
@@ -179,24 +198,32 @@ export function OverlayApp() {
   const handlePointerUp = (event: React.PointerEvent<HTMLDivElement>) => {
     if (kind !== "reward" || !drawing || finishing.current) return;
     setDrawing(false);
+    stopPencilScratchTone(pencilScratch.current);
+    pencilScratch.current = null;
     if (event.currentTarget.hasPointerCapture(event.pointerId)) {
       event.currentTarget.releasePointerCapture(event.pointerId);
     }
 
     const points = drawingRef.current;
     const length = pathLength(points);
-    const bounds = pointBounds(points);
-    if (points.length < 6 || length < 70 || Math.max(bounds.width, bounds.height) < 34) {
+    const shape = buildRewardShape(points);
+    if (length < 70 || !shape) {
       drawingRef.current = [];
       setRewardPath([]);
-      setDrawHint("这个饼太小，再画大一点");
+      setDrawHint("轮廓太小或太薄，再画饱满一点");
       return;
     }
 
-    const size = Math.min(340, Math.max(170, Math.max(bounds.width, bounds.height) * 1.08));
-    const x = Math.min(window.innerWidth - size / 2 - 12, Math.max(size / 2 + 12, bounds.x + bounds.width / 2));
-    const y = Math.min(window.innerHeight - size / 2 - 12, Math.max(size / 2 + 12, bounds.y + bounds.height / 2));
-    setRewardReveal({ x, y, size });
+    const bounds = pointBounds(points);
+    const x = Math.min(
+      window.innerWidth - shape.renderWidth / 2 - 12,
+      Math.max(shape.renderWidth / 2 + 12, bounds.x + bounds.width / 2),
+    );
+    const y = Math.min(
+      window.innerHeight - shape.renderHeight / 2 - 12,
+      Math.max(shape.renderHeight / 2 + 12, bounds.y + bounds.height / 2),
+    );
+    setRewardReveal({ ...shape, x, y });
     setDrawHint("空气承诺，正在烘焙");
     playPieRevealTone();
     finishAction({ kind: "reward", x, y }, 1880);
@@ -210,7 +237,7 @@ export function OverlayApp() {
       intensity,
     };
     setWhipHits((current) => [...current.slice(-7), hit]);
-    playWhipSnapTone(intensity);
+    playWhipSnapTone(intensity, point.x / window.innerWidth * 2 - 1);
   }, []);
 
   const handleWhipDropped = () => {
@@ -311,12 +338,44 @@ export function OverlayApp() {
           style={{
             left: rewardReveal.x,
             top: rewardReveal.y,
-            "--pie-size": `${rewardReveal.size}px`,
+            "--pie-width": `${rewardReveal.renderWidth}px`,
+            "--pie-height": `${rewardReveal.renderHeight}px`,
+            "--pie-size": `${Math.max(rewardReveal.renderWidth, rewardReveal.renderHeight)}px`,
           } as React.CSSProperties}
           aria-hidden="true"
         >
           <span className="reward-pie-impact__halo" />
-          <img className="reward-pie-impact__bread" src={rewardFlatbread} alt="" />
+          <svg
+            className="reward-pie-impact__bread"
+            viewBox={`0 0 ${rewardReveal.viewWidth} ${rewardReveal.viewHeight}`}
+            preserveAspectRatio="none"
+          >
+            <defs>
+              <clipPath id="reward-pie-shape">
+                <path d={rewardReveal.path} />
+              </clipPath>
+              <radialGradient id="reward-pie-base" cx="44%" cy="38%" r="72%">
+                <stop offset="0%" stopColor="#ffd972" />
+                <stop offset="62%" stopColor="#eeb044" />
+                <stop offset="100%" stopColor="#b96a16" />
+              </radialGradient>
+            </defs>
+            <path className="reward-pie-impact__crust" d={rewardReveal.path} />
+            <g clipPath="url(#reward-pie-shape)">
+              <rect width="100%" height="100%" fill="url(#reward-pie-base)" />
+              <image
+                className="reward-pie-impact__texture"
+                href={rewardFlatbread}
+                x={-rewardReveal.viewWidth * 0.25}
+                y={-rewardReveal.viewHeight * 0.25}
+                width={rewardReveal.viewWidth * 1.5}
+                height={rewardReveal.viewHeight * 1.5}
+                preserveAspectRatio="xMidYMid slice"
+              />
+              <rect className="reward-pie-impact__glaze" width="100%" height="100%" />
+            </g>
+            <path className="reward-pie-impact__rim" d={rewardReveal.path} />
+          </svg>
           <span className="reward-pie-impact__steam reward-pie-impact__steam--one" />
           <span className="reward-pie-impact__steam reward-pie-impact__steam--two" />
           <span className="reward-pie-impact__crumb reward-pie-impact__crumb--one" />
@@ -358,7 +417,7 @@ function pointBounds(points: Point[]) {
   return { x: minX, y: minY, width: maxX - minX, height: maxY - minY };
 }
 
-function playWhipSnapTone(intensity: number) {
+function playWhipSnapTone(intensity: number, pan: number) {
   try {
     const context = new AudioContext();
     const noise = context.createBufferSource();
@@ -366,34 +425,54 @@ function playWhipSnapTone(intensity: number) {
     const bodyFilter = context.createBiquadFilter();
     const highGain = context.createGain();
     const bodyGain = context.createGain();
+    const thump = context.createOscillator();
+    const thumpGain = context.createGain();
+    const roomDelay = context.createDelay(0.12);
+    const roomGain = context.createGain();
     const compressor = context.createDynamicsCompressor();
+    const stereo = context.createStereoPanner();
+    const master = context.createGain();
     const now = context.currentTime;
-    const duration = 0.145;
+    const strength = Math.min(1, Math.max(0.5, intensity));
+    const duration = 0.22;
     const noiseBuffer = context.createBuffer(1, Math.round(context.sampleRate * duration), context.sampleRate);
     const samples = noiseBuffer.getChannelData(0);
     for (let index = 0; index < samples.length; index += 1) {
       const progress = index / samples.length;
-      const transient = Math.exp(-progress * 38);
-      const body = Math.exp(-progress * 9) * 0.36;
-      samples[index] = (Math.random() * 2 - 1) * (transient + body);
+      const tipCrack = Math.exp(-progress * 82) * 1.3;
+      const leatherSlap = Math.exp(-progress * 16) * 0.58;
+      const roughness = 0.82 + Math.sin(index * 0.31) * 0.18;
+      samples[index] = (Math.random() * 2 - 1) * (tipCrack + leatherSlap) * roughness;
     }
     noise.buffer = noiseBuffer;
     highFilter.type = "highpass";
-    highFilter.frequency.value = 1650 + intensity * 500;
+    highFilter.frequency.value = 2100 + strength * 1200;
     bodyFilter.type = "bandpass";
-    bodyFilter.frequency.value = 260;
-    bodyFilter.Q.value = 0.72;
+    bodyFilter.frequency.value = 430 + strength * 210;
+    bodyFilter.Q.value = 0.86;
     highGain.gain.setValueAtTime(0.0001, now);
-    highGain.gain.exponentialRampToValueAtTime(0.12 + intensity * 0.13, now + 0.002);
-    highGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.052);
+    highGain.gain.exponentialRampToValueAtTime(0.2 + strength * 0.18, now + 0.0015);
+    highGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.045);
     bodyGain.gain.setValueAtTime(0.0001, now);
-    bodyGain.gain.exponentialRampToValueAtTime(0.035 + intensity * 0.045, now + 0.006);
-    bodyGain.gain.exponentialRampToValueAtTime(0.0001, now + duration);
-    compressor.threshold.value = -18;
-    compressor.knee.value = 5;
-    compressor.ratio.value = 5;
-    compressor.attack.value = 0.001;
-    compressor.release.value = 0.07;
+    bodyGain.gain.exponentialRampToValueAtTime(0.085 + strength * 0.095, now + 0.004);
+    bodyGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.17);
+
+    thump.type = "sine";
+    thump.frequency.setValueAtTime(105 + strength * 22, now);
+    thump.frequency.exponentialRampToValueAtTime(43, now + 0.16);
+    thumpGain.gain.setValueAtTime(0.0001, now);
+    thumpGain.gain.exponentialRampToValueAtTime(0.075 + strength * 0.075, now + 0.006);
+    thumpGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.19);
+
+    roomDelay.delayTime.value = 0.052;
+    roomGain.gain.value = 0.055 + strength * 0.025;
+    compressor.threshold.value = -20;
+    compressor.knee.value = 4;
+    compressor.ratio.value = 7;
+    compressor.attack.value = 0.0008;
+    compressor.release.value = 0.11;
+    stereo.pan.value = Math.min(0.7, Math.max(-0.7, pan * 0.7));
+    master.gain.value = 0.82;
 
     noise.connect(highFilter);
     noise.connect(bodyFilter);
@@ -401,41 +480,182 @@ function playWhipSnapTone(intensity: number) {
     bodyFilter.connect(bodyGain);
     highGain.connect(compressor);
     bodyGain.connect(compressor);
-    compressor.connect(context.destination);
+    thump.connect(thumpGain);
+    thumpGain.connect(compressor);
+    bodyGain.connect(roomDelay);
+    roomDelay.connect(roomGain);
+    roomGain.connect(compressor);
+    compressor.connect(stereo);
+    stereo.connect(master);
+    master.connect(context.destination);
     noise.start(now);
     noise.stop(now + duration);
-    noise.addEventListener("ended", () => closeAudioContext(context));
+    thump.start(now);
+    thump.stop(now + 0.2);
+    noise.addEventListener("ended", () => {
+      window.setTimeout(() => closeAudioContext(context), 90);
+    });
   } catch {
     // Keep the visual strike responsive when audio is unavailable.
   }
 }
 
+function startPencilScratchTone(): PencilScratchTone | null {
+  try {
+    const context = new AudioContext();
+    const source = context.createBufferSource();
+    const filter = context.createBiquadFilter();
+    const gain = context.createGain();
+    const bufferDuration = 0.64;
+    const buffer = context.createBuffer(
+      1,
+      Math.round(context.sampleRate * bufferDuration),
+      context.sampleRate,
+    );
+    const samples = buffer.getChannelData(0);
+
+    for (let index = 0; index < samples.length; index += 1) {
+      const grain = 0.62 + Math.sin(index * 0.17) * 0.13 + Math.sin(index * 0.037) * 0.09;
+      samples[index] = (Math.random() * 2 - 1) * grain;
+    }
+
+    source.buffer = buffer;
+    source.loop = true;
+    filter.type = "bandpass";
+    filter.frequency.value = 1850;
+    filter.Q.value = 0.78;
+    gain.gain.value = 0.0001;
+    source.connect(filter);
+    filter.connect(gain);
+    gain.connect(context.destination);
+    source.start();
+
+    return { context, source, filter, gain, stopped: false };
+  } catch {
+    return null;
+  }
+}
+
+function updatePencilScratchTone(tone: PencilScratchTone | null, speed: number) {
+  if (!tone || tone.stopped) return;
+  const now = tone.context.currentTime;
+  const energy = Math.min(1, Math.max(0.12, speed / 1.15));
+  const level = 0.024 + energy * 0.06;
+  tone.gain.gain.cancelScheduledValues(now);
+  tone.gain.gain.setValueAtTime(Math.max(0.0001, tone.gain.gain.value), now);
+  tone.gain.gain.exponentialRampToValueAtTime(level, now + 0.008);
+  tone.gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.072);
+  tone.filter.frequency.cancelScheduledValues(now);
+  tone.filter.frequency.setTargetAtTime(1450 + energy * 1650, now, 0.012);
+}
+
+function stopPencilScratchTone(tone: PencilScratchTone | null) {
+  if (!tone || tone.stopped) return;
+  tone.stopped = true;
+  const now = tone.context.currentTime;
+  tone.gain.gain.cancelScheduledValues(now);
+  tone.gain.gain.setValueAtTime(Math.max(0.0001, tone.gain.gain.value), now);
+  tone.gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.045);
+  tone.source.stop(now + 0.055);
+  tone.source.addEventListener("ended", () => closeAudioContext(tone.context));
+}
+
 function playPieRevealTone() {
   try {
     const context = new AudioContext();
-    const gain = context.createGain();
-    const low = context.createOscillator();
-    const high = context.createOscillator();
     const now = context.currentTime;
+    const master = context.createGain();
+    const compressor = context.createDynamicsCompressor();
+    master.gain.value = 0.96;
+    compressor.threshold.value = -22;
+    compressor.knee.value = 6;
+    compressor.ratio.value = 6;
+    compressor.attack.value = 0.004;
+    compressor.release.value = 0.16;
+    master.connect(compressor);
+    compressor.connect(context.destination);
 
-    low.type = "sine";
-    low.frequency.setValueAtTime(150, now);
-    low.frequency.exponentialRampToValueAtTime(310, now + 0.18);
-    high.type = "triangle";
-    high.frequency.setValueAtTime(420, now + 0.08);
-    high.frequency.exponentialRampToValueAtTime(680, now + 0.26);
-    gain.gain.setValueAtTime(0.0001, now);
-    gain.gain.exponentialRampToValueAtTime(0.08, now + 0.025);
-    gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.34);
+    // A short, warm oven breath while the drawn outline fills with bread texture.
+    const bakeNoise = context.createBufferSource();
+    const bakeFilter = context.createBiquadFilter();
+    const bakeGain = context.createGain();
+    const bakeDuration = 0.52;
+    const bakeBuffer = context.createBuffer(
+      1,
+      Math.round(context.sampleRate * bakeDuration),
+      context.sampleRate,
+    );
+    const bakeSamples = bakeBuffer.getChannelData(0);
+    for (let index = 0; index < bakeSamples.length; index += 1) {
+      const progress = index / bakeSamples.length;
+      const envelope = Math.sin(Math.PI * progress) * Math.exp(-progress * 0.9);
+      bakeSamples[index] = (Math.random() * 2 - 1) * envelope;
+    }
+    bakeNoise.buffer = bakeBuffer;
+    bakeFilter.type = "bandpass";
+    bakeFilter.frequency.setValueAtTime(720, now);
+    bakeFilter.frequency.exponentialRampToValueAtTime(1380, now + bakeDuration);
+    bakeFilter.Q.value = 0.7;
+    bakeGain.gain.setValueAtTime(0.0001, now);
+    bakeGain.gain.exponentialRampToValueAtTime(0.052, now + 0.12);
+    bakeGain.gain.exponentialRampToValueAtTime(0.0001, now + bakeDuration);
+    bakeNoise.connect(bakeFilter);
+    bakeFilter.connect(bakeGain);
+    bakeGain.connect(master);
 
-    low.connect(gain);
-    high.connect(gain);
-    gain.connect(context.destination);
-    low.start(now);
-    high.start(now + 0.08);
-    low.stop(now + 0.28);
-    high.stop(now + 0.34);
-    high.addEventListener("ended", () => closeAudioContext(context));
+    // A rounded rising body gives the impression that the flatbread is puffing up.
+    const rise = context.createOscillator();
+    const riseGain = context.createGain();
+    rise.type = "sine";
+    rise.frequency.setValueAtTime(138, now);
+    rise.frequency.exponentialRampToValueAtTime(238, now + 0.46);
+    riseGain.gain.setValueAtTime(0.0001, now);
+    riseGain.gain.exponentialRampToValueAtTime(0.112, now + 0.11);
+    riseGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.54);
+    rise.connect(riseGain);
+    riseGain.connect(master);
+
+    // The soft low drop is the moment the finished bread lands on screen.
+    const landing = context.createOscillator();
+    const landingGain = context.createGain();
+    landing.type = "sine";
+    landing.frequency.setValueAtTime(112, now + 0.46);
+    landing.frequency.exponentialRampToValueAtTime(54, now + 0.68);
+    landingGain.gain.setValueAtTime(0.0001, now);
+    landingGain.gain.setValueAtTime(0.0001, now + 0.45);
+    landingGain.gain.exponentialRampToValueAtTime(0.24, now + 0.475);
+    landingGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.7);
+    landing.connect(landingGain);
+    landingGain.connect(master);
+
+    // Two restrained overtones add a small golden glint without becoming a coin jingle.
+    const glintFrequencies = [659.25, 987.77];
+    const glints = glintFrequencies.map((frequency, index) => {
+      const oscillator = context.createOscillator();
+      const gain = context.createGain();
+      const start = now + 0.53 + index * 0.11;
+      const stop = start + 0.42;
+      oscillator.type = index === 0 ? "sine" : "triangle";
+      oscillator.frequency.setValueAtTime(frequency, start);
+      oscillator.frequency.exponentialRampToValueAtTime(frequency * 0.985, stop);
+      gain.gain.setValueAtTime(0.0001, now);
+      gain.gain.setValueAtTime(0.0001, start);
+      gain.gain.exponentialRampToValueAtTime(index === 0 ? 0.07 : 0.04, start + 0.018);
+      gain.gain.exponentialRampToValueAtTime(0.0001, stop);
+      oscillator.connect(gain);
+      gain.connect(master);
+      oscillator.start(start);
+      oscillator.stop(stop);
+      return oscillator;
+    });
+
+    bakeNoise.start(now);
+    bakeNoise.stop(now + bakeDuration);
+    rise.start(now);
+    rise.stop(now + 0.56);
+    landing.start(now + 0.45);
+    landing.stop(now + 0.72);
+    glints[glints.length - 1].addEventListener("ended", () => closeAudioContext(context));
   } catch {
     // The drawing and transformation remain complete when audio is unavailable.
   }

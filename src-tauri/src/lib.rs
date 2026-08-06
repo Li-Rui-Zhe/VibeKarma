@@ -7,10 +7,7 @@ use std::{path::PathBuf, sync::Arc};
 
 use codex::CodexManager;
 use codex_window::CodexWindowInfo;
-use models::{
-    AppSettings, AppSnapshot, DiaryEntry, FeedbackReceipt, FeedbackRequest, SessionSnapshot,
-};
-use serde_json::Value;
+use models::{AppSettings, AppSnapshot, DiaryEntry, FeedbackReceipt, FeedbackRequest};
 use storage::Storage;
 use tauri::{Manager, State};
 
@@ -78,46 +75,6 @@ fn save_settings(
 }
 
 #[tauri::command]
-async fn connect_codex(manager: State<'_, Arc<CodexManager>>) -> Result<SessionSnapshot, String> {
-    manager.inner().clone().connect().await
-}
-
-#[tauri::command]
-async fn disconnect_codex(manager: State<'_, Arc<CodexManager>>) -> Result<(), String> {
-    manager.disconnect().await
-}
-
-#[tauri::command]
-async fn send_user_message(
-    manager: State<'_, Arc<CodexManager>>,
-    text: String,
-) -> Result<Value, String> {
-    manager.inner().clone().send_user_message(text).await
-}
-
-#[tauri::command]
-async fn send_feedback(
-    manager: State<'_, Arc<CodexManager>>,
-    feedback: FeedbackRequest,
-) -> Result<FeedbackReceipt, String> {
-    manager.inner().clone().send_feedback(feedback).await
-}
-
-#[tauri::command]
-async fn interrupt_turn(manager: State<'_, Arc<CodexManager>>) -> Result<(), String> {
-    manager.interrupt_turn().await
-}
-
-#[tauri::command]
-async fn respond_to_server_request(
-    manager: State<'_, Arc<CodexManager>>,
-    request_id: Value,
-    result: Value,
-) -> Result<(), String> {
-    manager.respond_to_server_request(request_id, result).await
-}
-
-#[tauri::command]
 fn list_diaries(manager: State<'_, Arc<CodexManager>>) -> Vec<DiaryEntry> {
     manager.list_diaries()
 }
@@ -148,12 +105,6 @@ pub fn run() {
             set_main_window_mode,
             hide_codex_overlay,
             save_settings,
-            connect_codex,
-            disconnect_codex,
-            send_user_message,
-            send_feedback,
-            interrupt_turn,
-            respond_to_server_request,
             list_diaries
         ])
         .run(tauri::generate_context!())
