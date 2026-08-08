@@ -2,7 +2,7 @@
 
 VibeKarma 是一个用 Tauri 2、React 19 和 Rust 构建的 Codex 桌面伴侣。它覆盖在真实 Codex 桌面窗口上，把“惩罚一下”和“奖励一下”做成可操作的互动反馈，并让本机 Codex CLI 将这次反馈写成第一人称反省日记。
 
-> 当前桌面交互依赖 Windows 窗口识别能力，完整体验以 Windows 为准。
+> 桌面窗口识别与互动覆盖层支持 Windows 和 macOS；两个系统使用各自的原生窗口 API，互不影响。
 
 ## 当前功能
 
@@ -12,14 +12,14 @@ VibeKarma 是一个用 Tauri 2、React 19 和 Rust 构建的 Codex 桌面伴侣�
 - 鞭子会跟随鼠标按物理链条摆动；高速甩动时产生抽击、声音、震动和鞭痕反馈。
 - 触发阈值经过降低，普通鼠标甩动也比较容易打出有效抽击。
 - 一次覆盖层内可以连续抽击，但最终只记录一次惩罚。
-- 单击放手并结束，`Esc` 撤回本次惩罚。
+- 单击放手并结束，`Esc` 或鼠标右键撤回本次惩罚。
 
 ### 奖励一下
 
 - 按钮文案为“奖励一下 / 画个大饼，现场兑现”。
 - 悬停时，笔会沿着饼的轮廓完成绘制动效。
 - 进入覆盖层后按住鼠标画饼，松手时校验轨迹；有效轨迹会现场变成一张真正的大饼。
-- 轨迹太短或范围太小时不会提交，可以直接重画；`Esc` 退出。
+- 轨迹太短或范围太小时不会提交，可以直接重画；`Esc` 或鼠标右键退出。
 
 ### 反省日记
 
@@ -52,7 +52,8 @@ VibeKarma 是一个用 Tauri 2、React 19 和 Rust 构建的 Codex 桌面伴侣�
 - `src/components/WhipPhysics.tsx`：鼠标驱动的鞭子物理与命中判断。
 - `src/components/DrawPieIcon.tsx`：奖励按钮的画饼动效。
 - `src/components/DiaryBook.tsx`：封面、翻页和基于 DOM 测量的正文分页。
-- `src-tauri/src/codex_window.rs`：Codex 窗口识别、覆盖层定位和窗口模式。
+- `src-tauri/src/codex_window.rs`：跨平台窗口识别入口、覆盖层定位和窗口模式。
+- `src-tauri/src/codex_window/macos.rs`：使用 macOS Core Graphics 识别并跟随 Codex 窗口。
 - `src-tauri/src/codex.rs`：反馈队列、日记提示词和独立 Codex CLI 调用。
 - `src-tauri/src/storage.rs`：设置、事件日志和 SQLite 日记存储。
 
@@ -60,11 +61,11 @@ VibeKarma 是一个用 Tauri 2、React 19 和 Rust 构建的 Codex 桌面伴侣�
 
 ## 运行要求
 
-- Windows 10/11。
+- Windows 10/11，或运行在 Intel / Apple Silicon 上的 macOS。
 - Node.js 22 或更高版本。
 - pnpm 10。
-- Rust stable MSVC 工具链。
-- Visual C++ Build Tools、Windows SDK 和 WebView2 Runtime。
+- Rust stable 工具链。
+- Windows 开发需要 Visual C++ Build Tools、Windows SDK 和 WebView2 Runtime；macOS 开发需要 Xcode Command Line Tools。
 - 已安装并可正常运行的 Codex CLI。
 - 已打开且可见的 Codex 桌面客户端窗口。
 
@@ -110,7 +111,7 @@ vibekarma.sqlite3
 
 ## 发布
 
-推送 `v*` 标签会触发 GitHub Actions，创建草稿 Release，并尝试构建 Windows x64、Linux x64、macOS Intel 和 macOS Apple Silicon 安装包。当前真实 Codex 窗口识别与互动覆盖层仍是 Windows 专属能力；其他平台的安装包不代表完整功能已经适配。
+推送 `v*` 标签会触发 GitHub Actions，创建草稿 Release，并尝试构建 Windows x64、Linux x64、macOS Intel 和 macOS Apple Silicon 安装包。Windows 与 macOS 都会识别并跟随各自平台上的 Codex 桌面窗口；Linux 当前只提供基础界面，不支持互动覆盖层。
 
 ```powershell
 git tag v0.1.0

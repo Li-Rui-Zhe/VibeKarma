@@ -31,6 +31,7 @@ type View = "control" | "diary";
 
 const SNAPSHOT_TIMEOUT_MS = 5_000;
 const SNAPSHOT_ATTEMPTS = 3;
+const IS_MACOS = /Macintosh|Mac OS X/i.test(navigator.userAgent);
 
 function App() {
   const [snapshot, setSnapshot] = useState<AppSnapshot | null>(null);
@@ -316,7 +317,11 @@ function App() {
           </section>
 
           <footer className="control-footer">
-            <span>{ready ? `ChatGPT.exe · PID ${codexWindow?.processId}` : "等待 Codex 桌面窗口"}</span>
+            <span>
+              {ready
+                ? `${IS_MACOS ? "Codex" : "ChatGPT.exe"} · PID ${codexWindow?.processId}`
+                : "等待 Codex 桌面窗口"}
+            </span>
             {(busy || reflectionCount > 0) && (
               <span className="armed-state">
                 <LoaderCircle className="spin" size={13} />

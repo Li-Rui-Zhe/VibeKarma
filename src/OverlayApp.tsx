@@ -229,6 +229,13 @@ export function OverlayApp() {
     finishAction({ kind: "reward", x, y }, 1880);
   };
 
+  const handleContextMenu = (event: React.MouseEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+    if (!kind || finishing.current) return;
+    cancelOverlay();
+  };
+
   const handleWhipStrike = useCallback((point: Point, intensity: number, angle: number) => {
     const hit: WhipHit = {
       ...point,
@@ -249,7 +256,7 @@ export function OverlayApp() {
 
   const correctionHint = correctionPhase === "dropping"
     ? "已放手…"
-    : "高速甩动鼠标以此惩罚你那愚蠢的codex！单击放手结束，Esc撤回惩罚";
+    : "高速甩动鼠标以此惩罚你那愚蠢的codex！左键放手结束，右键撤回惩罚";
   const showToolCursor = Boolean(kind === "reward" && !impact);
 
   return (
@@ -259,12 +266,13 @@ export function OverlayApp() {
       onPointerDown={handlePointerDown}
       onPointerUp={handlePointerUp}
       onPointerCancel={handlePointerUp}
+      onContextMenu={handleContextMenu}
       role="application"
       aria-label={kind === "correction" ? "鞭打 Codex" : "在 Codex 上画一个大饼"}
     >
       {kind && !impact && (
         <div className={`overlay-exit-hint overlay-exit-hint--${kind}`}>
-          {kind === "reward" ? `${drawHint} · Esc 退出` : correctionHint}
+          {kind === "reward" ? `${drawHint} · 右键退出` : correctionHint}
         </div>
       )}
 

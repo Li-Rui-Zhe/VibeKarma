@@ -16,6 +16,16 @@ target/
 .cargo-home/
 .rustup-home/
 
+# Packaged desktop installers and application bundles
+*.exe
+*.msi
+*.msix
+*.dmg
+*.AppImage
+*.deb
+*.rpm
+*.app/
+
 # Local environment files and secrets
 .env
 .env.*

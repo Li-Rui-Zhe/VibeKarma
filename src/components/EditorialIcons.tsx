@@ -2,40 +2,6 @@ interface IconProps {
   className?: string;
 }
 
-export function BrandMarkIcon({ className = "" }: IconProps) {
-  return (
-    <svg
-      className={className}
-      viewBox="0 0 64 64"
-      role="img"
-      aria-label="VibeKarma"
-    >
-      <rect x="2.5" y="2.5" width="59" height="59" rx="15" fill="#173d33" />
-      <rect x="6.5" y="6.5" width="51" height="51" rx="11" fill="none" stroke="#b78a34" />
-      <path
-        d="M14 20.5c7.6-2.1 13.7-.8 18 3.9v24.3c-4.5-4.2-10.5-5.4-18-3.4V20.5Z"
-        fill="#f7f0df"
-        stroke="#d8c8a2"
-        strokeLinejoin="round"
-      />
-      <path
-        d="M50 20.5c-7.6-2.1-13.7-.8-18 3.9v24.3c4.5-4.2 10.5-5.4 18-3.4V20.5Z"
-        fill="#f7f0df"
-        stroke="#d8c8a2"
-        strokeLinejoin="round"
-      />
-      <path d="M32 25v22" stroke="#b78a34" strokeWidth="1.4" />
-      <path
-        d="M43.5 12.5c-8 4.2-11.2 10.7-9.7 19.4 7.2-3 11.2-9.1 12-18.2l-2.3-1.2Z"
-        fill="#d6ad50"
-        stroke="#8b651d"
-        strokeLinejoin="round"
-      />
-      <path d="M43.8 14.2 34 31.8" stroke="#805c1d" strokeLinecap="round" />
-    </svg>
-  );
-}
-
 export function MedalIcon({ className = "" }: IconProps) {
   return (
     <svg className={`medal-icon ${className}`} viewBox="0 0 64 64" aria-hidden="true">

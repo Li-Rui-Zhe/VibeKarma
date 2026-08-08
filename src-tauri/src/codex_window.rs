@@ -1,15 +1,26 @@
-use std::process::Stdio;
 #[cfg(target_os = "windows")]
+use std::process::Stdio;
+#[cfg(any(target_os = "windows", target_os = "macos"))]
 use std::time::Duration;
 
+#[cfg(target_os = "windows")]
 use base64::{engine::general_purpose::STANDARD, Engine as _};
 use serde::{Deserialize, Serialize};
-use tauri::{
-    AppHandle, Emitter, Manager, PhysicalPosition, PhysicalSize, Position, Size, WebviewWindow,
-};
+use tauri::{AppHandle, Emitter, Manager, Position, Size, WebviewWindow};
+#[cfg(target_os = "macos")]
+use tauri::{LogicalPosition, LogicalSize};
+#[cfg(not(target_os = "macos"))]
+use tauri::{PhysicalPosition, PhysicalSize};
+#[cfg(target_os = "windows")]
 use tokio::process::Command;
 
+#[cfg(target_os = "macos")]
+mod macos;
+
+#[cfg(target_os = "windows")]
 const WINDOW_HELPER: &str = include_str!("../scripts/codex-window.ps1");
+#[cfg(target_os = "windows")]
+const CREATE_NO_WINDOW: u32 = 0x0800_0000;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -89,10 +100,11 @@ pub fn arm_overlay(
         .map_err(|error| format!("无法激活覆盖窗口：{error}"))?;
     app.emit_to("overlay", "overlay-arm", kind)
         .map_err(|error| format!("无法启动互动效果：{error}"))?;
-    track_window_bounds(overlay, info.handle);
+    track_window_bounds(overlay, info.handle, info.process_id);
     Ok(info)
 }
 
+#[cfg(not(target_os = "macos"))]
 fn apply_overlay_bounds(overlay: &WebviewWindow, bounds: WindowBounds) -> Result<(), String> {
     overlay
         .set_position(Position::Physical(PhysicalPosition::new(
@@ -108,8 +120,26 @@ fn apply_overlay_bounds(overlay: &WebviewWindow, bounds: WindowBounds) -> Result
         .map_err(|error| format!("无法调整覆盖窗口：{error}"))
 }
 
-#[cfg(target_os = "windows")]
-fn track_window_bounds(overlay: WebviewWindow, handle: i64) {
+#[cfg(target_os = "macos")]
+fn apply_overlay_bounds(overlay: &WebviewWindow, bounds: WindowBounds) -> Result<(), String> {
+    // Core Graphics reports macOS window frames in logical points. Using logical
+    // Tauri coordinates keeps the overlay aligned on Retina and mixed-DPI screens.
+    overlay
+        .set_position(Position::Logical(LogicalPosition::new(
+            bounds.left as f64,
+            bounds.top as f64,
+        )))
+        .map_err(|error| format!("无法对齐 Codex 窗口：{error}"))?;
+    overlay
+        .set_size(Size::Logical(LogicalSize::new(
+            bounds.width as f64,
+            bounds.height as f64,
+        )))
+        .map_err(|error| format!("无法调整覆盖窗口：{error}"))
+}
+
+#[cfg(any(target_os = "windows", target_os = "macos"))]
+fn track_window_bounds(overlay: WebviewWindow, handle: i64, process_id: u32) {
     tauri::async_runtime::spawn(async move {
         tokio::time::sleep(Duration::from_millis(120)).await;
         let mut ticker = tokio::time::interval(Duration::from_millis(80));
@@ -127,7 +157,7 @@ fn track_window_bounds(overlay: WebviewWindow, handle: i64) {
                 }
                 Err(_) => break,
             }
-            let Some(bounds) = physical_window_bounds(handle) else {
+            let Some(bounds) = live_window_bounds(handle, process_id) else {
                 break;
             };
             let _ = apply_overlay_bounds(&overlay, bounds);
@@ -135,8 +165,8 @@ fn track_window_bounds(overlay: WebviewWindow, handle: i64) {
     });
 }
 
-#[cfg(not(target_os = "windows"))]
-fn track_window_bounds(_overlay: WebviewWindow, _handle: i64) {}
+#[cfg(not(any(target_os = "windows", target_os = "macos")))]
+fn track_window_bounds(_overlay: WebviewWindow, _handle: i64, _process_id: u32) {}
 
 #[cfg(target_os = "windows")]
 #[repr(C)]
@@ -197,6 +227,11 @@ fn physical_window_bounds(handle: i64) -> Option<WindowBounds> {
 }
 
 #[cfg(target_os = "windows")]
+fn live_window_bounds(handle: i64, _process_id: u32) -> Option<WindowBounds> {
+    physical_window_bounds(handle)
+}
+
+#[cfg(target_os = "windows")]
 fn current_window_bounds(info: &CodexWindowInfo) -> Result<WindowBounds, String> {
     let mut process_id = 0_u32;
     let thread_id =
@@ -208,14 +243,20 @@ fn current_window_bounds(info: &CodexWindowInfo) -> Result<WindowBounds, String>
         .ok_or_else(|| "暂时无法读取 Codex 窗口位置，请重试".to_owned())
 }
 
-#[cfg(not(target_os = "windows"))]
-fn physical_window_bounds(_handle: i64) -> Option<WindowBounds> {
-    None
+#[cfg(target_os = "macos")]
+fn live_window_bounds(handle: i64, process_id: u32) -> Option<WindowBounds> {
+    macos::window_bounds(handle, process_id)
 }
 
-#[cfg(not(target_os = "windows"))]
+#[cfg(target_os = "macos")]
 fn current_window_bounds(info: &CodexWindowInfo) -> Result<WindowBounds, String> {
-    Ok(info.into())
+    macos::window_bounds(info.handle, info.process_id)
+        .ok_or_else(|| "Codex 窗口已经关闭或发生变化，请重试".to_owned())
+}
+
+#[cfg(not(any(target_os = "windows", target_os = "macos")))]
+fn current_window_bounds(_info: &CodexWindowInfo) -> Result<WindowBounds, String> {
+    Err("当前系统暂不支持 Codex 窗口跟随".to_owned())
 }
 
 pub fn set_main_window_mode(app: &AppHandle, mode: &str) -> Result<(), String> {
@@ -248,6 +289,7 @@ pub(crate) fn ensure_visible_window(info: &CodexWindowInfo) -> Result<(), String
     Ok(())
 }
 
+#[cfg(target_os = "windows")]
 async fn run_helper() -> Result<CodexWindowInfo, String> {
     let script_bytes = WINDOW_HELPER
         .encode_utf16()
@@ -265,6 +307,7 @@ async fn run_helper() -> Result<CodexWindowInfo, String> {
         .arg(encoded_script)
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
+        .creation_flags(CREATE_NO_WINDOW)
         .kill_on_drop(true);
 
     let child = command
@@ -284,6 +327,30 @@ async fn run_helper() -> Result<CodexWindowInfo, String> {
             format!("Windows 自动化没有返回结果：{}", stderr.trim())
         })?;
     serde_json::from_str(payload).map_err(|error| format!("无法解析窗口检测结果：{error}"))
+}
+
+#[cfg(target_os = "macos")]
+async fn run_helper() -> Result<CodexWindowInfo, String> {
+    macos::inspect()
+}
+
+#[cfg(not(any(target_os = "windows", target_os = "macos")))]
+async fn run_helper() -> Result<CodexWindowInfo, String> {
+    Ok(CodexWindowInfo {
+        ok: false,
+        found: false,
+        handle: 0,
+        process_id: 0,
+        left: 0,
+        top: 0,
+        width: 0,
+        height: 0,
+        working: false,
+        editor_found: false,
+        editor_has_draft: false,
+        context: String::new(),
+        error: Some("当前系统暂不支持 Codex 窗口检测".to_owned()),
+    })
 }
 
 #[cfg(test)]

@@ -1,3 +1,5 @@
+#[cfg(not(target_os = "windows"))]
+use std::path::PathBuf;
 use std::{path::Path, process::Stdio, sync::Arc, time::Duration};
 
 use chrono::{Local, SecondsFormat};
@@ -10,9 +12,14 @@ use crate::{
     storage::Storage,
 };
 
+#[cfg(target_os = "macos")]
+mod macos;
+
 const REFLECTION_TIMEOUT: Duration = Duration::from_secs(300);
 const MAX_CONTEXT_CHARS: usize = 18_000;
 const DIARY_TITLE_MAX_CHARS: usize = 20;
+#[cfg(target_os = "windows")]
+const CREATE_NO_WINDOW: u32 = 0x0800_0000;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum DiaryIntensity {
@@ -290,19 +297,47 @@ fn build_codex_exec_command(settings: &AppSettings, workspace: &Path) -> Result<
             || configured.is_none();
         if is_batch {
             let mut command = Command::new("cmd.exe");
-            command.arg("/d").arg("/c").arg(executable).args(args);
+            command
+                .arg("/d")
+                .arg("/c")
+                .arg(executable)
+                .args(args)
+                .creation_flags(CREATE_NO_WINDOW);
             return Ok(command);
         }
         let mut command = Command::new(executable);
-        command.args(args);
+        command.args(args).creation_flags(CREATE_NO_WINDOW);
         Ok(command)
     }
 
     #[cfg(not(target_os = "windows"))]
     {
-        let mut command = Command::new(configured.unwrap_or("codex"));
+        #[cfg(target_os = "macos")]
+        let executable = macos::resolve_codex_executable(configured);
+        #[cfg(not(target_os = "macos"))]
+        let executable = PathBuf::from(configured.unwrap_or("codex"));
+
+        let mut command = Command::new(&executable);
         command.args(args);
+        prepend_executable_dir_to_path(&mut command, &executable);
         Ok(command)
+    }
+}
+
+#[cfg(not(target_os = "windows"))]
+fn prepend_executable_dir_to_path(command: &mut Command, executable: &Path) {
+    let Some(parent) = executable
+        .parent()
+        .filter(|parent| !parent.as_os_str().is_empty())
+    else {
+        return;
+    };
+    let mut paths = vec![parent.to_path_buf()];
+    if let Some(current) = std::env::var_os("PATH") {
+        paths.extend(std::env::split_paths(&current));
+    }
+    if let Ok(path) = std::env::join_paths(paths) {
+        command.env("PATH", path);
     }
 }
 

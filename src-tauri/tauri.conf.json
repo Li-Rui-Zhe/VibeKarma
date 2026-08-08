@@ -10,6 +10,7 @@
     "frontendDist": "../dist"
   },
   "app": {
+    "macOSPrivateApi": true,
     "windows": [
       {
         "label": "main",
@@ -48,6 +49,12 @@
     "category": "DeveloperTool",
     "shortDescription": "带奖惩反馈和第一人称日记的 Codex 客户端",
     "longDescription": "VibeKarma connects to a locally installed Codex CLI and turns feedback into warm, first-person reflection diaries.",
+    "windows": {
+      "nsis": {
+        "installerIcon": "icons/icon.ico",
+        "uninstallerIcon": "icons/icon.ico"
+      }
+    },
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",

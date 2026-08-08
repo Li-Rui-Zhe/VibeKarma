@@ -87,9 +87,16 @@ pub fn run() {
             let data_root = std::env::var_os("VIBEKARMA_DATA_DIR")
                 .map(PathBuf::from)
                 .or_else(|| {
-                    PathBuf::from(r"D:\")
-                        .exists()
-                        .then(|| PathBuf::from(r"D:\VibeKarmaData"))
+                    #[cfg(target_os = "windows")]
+                    {
+                        PathBuf::from(r"D:\")
+                            .exists()
+                            .then(|| PathBuf::from(r"D:\VibeKarmaData"))
+                    }
+                    #[cfg(not(target_os = "windows"))]
+                    {
+                        None
+                    }
                 })
                 .unwrap_or(fallback_root);
             let storage = Arc::new(Storage::new(data_root).map_err(std::io::Error::other)?);
