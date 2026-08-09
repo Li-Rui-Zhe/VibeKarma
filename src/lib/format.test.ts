@@ -7,7 +7,8 @@ describe("formatDiaryDate", () => {
   });
 
   it("formats a diary timestamp for the Chinese interface", () => {
-    const formatted = formatDiaryDate("2026-08-03T11:23:00+08:00");
+    const localTimestamp = new Date(2026, 7, 3, 11, 23).toISOString();
+    const formatted = formatDiaryDate(localTimestamp);
     expect(formatted).toContain("8月3日");
     expect(formatted).toContain("11:23");
   });
