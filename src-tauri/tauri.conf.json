@@ -47,8 +47,15 @@
     "active": true,
     "targets": "all",
     "category": "DeveloperTool",
+    "copyright": "Copyright 2026 LiRuiZhe",
     "shortDescription": "带奖惩反馈和第一人称日记的 Codex 客户端",
     "longDescription": "VibeKarma connects to a locally installed Codex CLI and turns feedback into warm, first-person reflection diaries.",
+    "resources": {
+      "../LICENSE": "licenses/LICENSE",
+      "../NOTICE": "licenses/NOTICE",
+      "../src/assets/fonts/CEFFontsCJK-OFL-1.1.txt": "licenses/CEFFontsCJK-OFL-1.1.txt",
+      "../src/assets/fonts/NaniFont-OFL-1.1.txt": "licenses/NaniFont-OFL-1.1.txt"
+    },
     "windows": {
       "nsis": {
         "installerIcon": "icons/icon.ico",
