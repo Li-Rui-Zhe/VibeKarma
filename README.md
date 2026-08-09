@@ -13,6 +13,7 @@ VibeKarma 是一个用 Tauri 2、React 19 和 Rust 构建的 Codex 桌面伴侣�
 - Apple Silicon Mac：下载 `VibeKarma_*_aarch64.dmg`
 - Intel Mac：下载 `VibeKarma_*_x64.dmg`
 （滑到最底下的Assets展开）
+
 当前版本为预发布版本，安装包尚未进行代码签名。Windows SmartScreen 或 macOS Gatekeeper 可能显示安全提醒。使用前需要在本机安装并登录 Codex CLI。
 
 ## 当前功能
