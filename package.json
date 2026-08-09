@@ -2,6 +2,8 @@
   "name": "vibekarma",
   "private": true,
   "version": "0.1.0",
+  "author": "LiRuiZhe",
+  "license": "Apache-2.0",
   "type": "module",
   "packageManager": "pnpm@10.13.1",
   "scripts": {

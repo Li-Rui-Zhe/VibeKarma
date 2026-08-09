@@ -2,9 +2,9 @@
 name = "vibekarma"
 version = "0.1.0"
 description = "A warm, feedback-driven desktop client for Codex"
-authors = ["VibeKarma contributors"]
+authors = ["LiRuiZhe"]
 edition = "2021"
-license = "MIT"
+license = "Apache-2.0"
 
 [lib]
 name = "vibekarma_lib"

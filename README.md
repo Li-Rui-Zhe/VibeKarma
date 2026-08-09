@@ -133,4 +133,9 @@ git push origin v0.1.0
 
 ## License
 
-[MIT](./LICENSE)
+[Apache License 2.0](./LICENSE)
+
+Copyright 2026 LiRuiZhe. See [NOTICE](./NOTICE) for attribution information.
+
+Bundled font assets remain under the SIL Open Font License 1.1; their license
+texts are included in `src/assets/fonts/`.
