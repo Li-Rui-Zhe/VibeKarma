@@ -4,6 +4,17 @@ VibeKarma 是一个用 Tauri 2、React 19 和 Rust 构建的 Codex 桌面伴侣�
 
 > 桌面窗口识别与互动覆盖层支持 Windows 和 macOS；两个系统使用各自的原生窗口 API，互不影响。
 
+## 下载
+
+前往 [GitHub Releases](https://github.com/Li-Rui-Zhe/VibeKarma/releases) 下载最新版本。
+
+- Windows 普通用户：下载 `VibeKarma_*_x64-setup.exe`
+- Windows 企业部署：下载 `VibeKarma_*_x64_en-US.msi`
+- Apple Silicon Mac：下载 `VibeKarma_*_aarch64.dmg`
+- Intel Mac：下载 `VibeKarma_*_x64.dmg`
+
+当前版本为预发布版本，安装包尚未进行代码签名。Windows SmartScreen 或 macOS Gatekeeper 可能显示安全提醒。使用前需要在本机安装并登录 Codex CLI。
+
 ## 当前功能
 
 ### 惩罚一下
