@@ -213,15 +213,7 @@ fn configured_candidates(value: &str) -> Vec<PathBuf> {
         return vec![configured];
     }
 
-    let mut names = vec![value.to_owned()];
-    #[cfg(target_os = "windows")]
-    if configured.extension().is_none() {
-        names.extend([
-            format!("{value}.exe"),
-            format!("{value}.cmd"),
-            format!("{value}.bat"),
-        ]);
-    }
+    let names = configured_command_names(value, configured.extension().is_none());
 
     let mut candidates = vec![configured];
     if let Some(path) = std::env::var_os("PATH") {
@@ -231,6 +223,24 @@ fn configured_candidates(value: &str) -> Vec<PathBuf> {
         );
     }
     candidates
+}
+
+#[cfg(target_os = "windows")]
+fn configured_command_names(value: &str, has_no_extension: bool) -> Vec<String> {
+    let mut names = vec![value.to_owned()];
+    if has_no_extension {
+        names.extend([
+            format!("{value}.exe"),
+            format!("{value}.cmd"),
+            format!("{value}.bat"),
+        ]);
+    }
+    names
+}
+
+#[cfg(not(target_os = "windows"))]
+fn configured_command_names(value: &str, _has_no_extension: bool) -> [String; 1] {
+    [value.to_owned()]
 }
 
 async fn first_healthy(
@@ -367,19 +377,22 @@ fn is_usable_cli(path: &Path) -> bool {
     }
 }
 
+#[cfg(target_os = "windows")]
 fn launch_kind(path: &Path) -> LaunchKind {
-    #[cfg(target_os = "windows")]
-    {
-        if matches!(
-            path.extension()
-                .and_then(OsStr::to_str)
-                .map(|extension| extension.to_ascii_lowercase())
-                .as_deref(),
-            Some("cmd" | "bat")
-        ) {
-            return LaunchKind::Batch;
-        }
+    if matches!(
+        path.extension()
+            .and_then(OsStr::to_str)
+            .map(|extension| extension.to_ascii_lowercase())
+            .as_deref(),
+        Some("cmd" | "bat")
+    ) {
+        return LaunchKind::Batch;
     }
+    LaunchKind::Direct
+}
+
+#[cfg(not(target_os = "windows"))]
+fn launch_kind(_path: &Path) -> LaunchKind {
     LaunchKind::Direct
 }
 

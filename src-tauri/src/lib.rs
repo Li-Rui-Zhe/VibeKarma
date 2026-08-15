@@ -114,7 +114,7 @@ pub fn run() {
             let fallback_root = app.path().app_data_dir()?;
             let data_root = std::env::var_os("VIBEKARMA_DATA_DIR")
                 .map(PathBuf::from)
-                .or_else(|| {
+                .or({
                     #[cfg(target_os = "windows")]
                     {
                         PathBuf::from(r"D:\")
