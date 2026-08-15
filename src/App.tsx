@@ -1,10 +1,15 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
+import { open as openFile } from "@tauri-apps/plugin-dialog";
 import {
+  Check,
+  Copy,
+  FolderOpen,
   LoaderCircle,
   MessageSquareText,
   Minus,
   RefreshCw,
+  Settings2,
   X,
 } from "lucide-react";
 import whipReference from "./assets/feedback-whip-reference.png";
@@ -19,8 +24,10 @@ import {
   subscribeOverlayAction,
   subscribeOverlayCancel,
 } from "./lib/backend";
+import { parseCodexIssue } from "./lib/codexIssue";
 import type {
   AppSnapshot,
+  CodexCliInfo,
   CodexWindowInfo,
   DiaryEntry,
   FeedbackKind,
@@ -44,8 +51,15 @@ function App() {
   const [reflectionCount, setReflectionCount] = useState(0);
   const [actionPulse, setActionPulse] = useState<FeedbackKind | null>(null);
   const [toast, setToast] = useState<string | null>(null);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [settingsPath, setSettingsPath] = useState("");
+  const [settingsSaving, setSettingsSaving] = useState(false);
+  const [cliInfo, setCliInfo] = useState<CodexCliInfo | null>(null);
+  const [cliChecking, setCliChecking] = useState(true);
+  const [cliError, setCliError] = useState<string | null>(null);
   const feedbackHintRef = useRef("");
   const actionPulseTimerRef = useRef<number | null>(null);
+  const cliFailurePromptedRef = useRef(false);
 
   const refreshWindow = useCallback(async () => {
     setDetecting(true);
@@ -61,9 +75,39 @@ function App() {
   const loadSnapshot = useCallback(async () => {
     setBootError(null);
     try {
-      setSnapshot(await loadSnapshotWithRetry());
+      const nextSnapshot = await loadSnapshotWithRetry();
+      setSnapshot(nextSnapshot);
+      setSettingsPath(nextSnapshot.settings.codexPath ?? "");
     } catch (error) {
       setBootError(`初始化失败：${String(error)}`);
+    }
+  }, []);
+
+  const refreshCliInfo = useCallback(async (showFailure = false) => {
+    setCliChecking(true);
+    try {
+      const info = await backend.inspectCodexCli();
+      setCliInfo(info);
+      if (info.available) {
+        cliFailurePromptedRef.current = false;
+      } else if (showFailure && !cliFailurePromptedRef.current) {
+        cliFailurePromptedRef.current = true;
+        setCliError(info.message);
+      }
+    } catch (error) {
+      const message = String(error);
+      setCliInfo({
+        available: false,
+        source: null,
+        path: null,
+        message,
+      });
+      if (showFailure && !cliFailurePromptedRef.current) {
+        cliFailurePromptedRef.current = true;
+        setCliError(message);
+      }
+    } finally {
+      setCliChecking(false);
     }
   }, []);
 
@@ -91,6 +135,7 @@ function App() {
     let alive = true;
     void loadSnapshot();
     void refreshWindow();
+    void refreshCliInfo(true);
     const timer = window.setInterval(() => {
       if (alive && view === "control") void refreshWindow();
     }, 5000);
@@ -98,7 +143,7 @@ function App() {
       alive = false;
       window.clearInterval(timer);
     };
-  }, [loadSnapshot, refreshWindow, view]);
+  }, [loadSnapshot, refreshCliInfo, refreshWindow, view]);
 
   useEffect(() => {
     let alive = true;
@@ -125,7 +170,11 @@ function App() {
       onLog: (log) => {
         if (alive && log.level === "error") {
           if (log.message.includes("日记")) setReflectionCount(0);
-          showToast(setToast, log.message);
+          const cliFailure = /Codex CLI|无法启动 Codex|没有找到可用的 Codex/.test(log.message);
+          if (cliFailure) {
+            setCliError(log.message);
+          }
+          showToast(setToast, cliFailure ? "Codex CLI 需要处理，请查看错误提示" : log.message);
         }
       },
       onDiary: (diary) => {
@@ -150,6 +199,10 @@ function App() {
   }, [deliverFeedback, refreshWindow]);
 
   useEffect(() => {
+    if (settingsOpen) void refreshCliInfo(false);
+  }, [refreshCliInfo, settingsOpen]);
+
+  useEffect(() => {
     const mode = view === "diary" ? "diary" : "compact";
     void backend.setWindowMode(mode);
   }, [view]);
@@ -163,8 +216,11 @@ function App() {
     [],
   );
 
-  const status = useMemo(() => windowStatus(codexWindow, detecting), [codexWindow, detecting]);
-  const ready = Boolean(codexWindow?.ok && codexWindow.found);
+  const status = useMemo(
+    () => appStatus(codexWindow, detecting, cliInfo, cliChecking),
+    [cliChecking, cliInfo, codexWindow, detecting],
+  );
+  const ready = Boolean(codexWindow?.ok && codexWindow.found && cliInfo?.available);
 
   const arm = async (kind: FeedbackKind) => {
     if (!ready || busy || !codexWindow) return;
@@ -188,6 +244,44 @@ function App() {
       setBusy(null);
       showToast(setToast, String(error));
       void refreshWindow();
+    }
+  };
+
+  const browseCodexCli = async () => {
+    try {
+      const selected = await openFile({
+        title: "选择 Codex CLI",
+        multiple: false,
+        directory: false,
+        ...(IS_MACOS
+          ? {}
+          : { filters: [{ name: "Codex CLI", extensions: ["exe", "cmd", "bat"] }] }),
+      });
+      if (typeof selected === "string") setSettingsPath(selected);
+    } catch (error) {
+      showToast(setToast, `无法打开文件选择器：${String(error)}`);
+    }
+  };
+
+  const persistCodexPath = async (path: string) => {
+    if (!snapshot || settingsSaving) return;
+    setSettingsSaving(true);
+    try {
+      const settings = await backend.saveSettings({
+        ...snapshot.settings,
+        codexPath: path.trim() || null,
+      });
+      setSnapshot((current) => (current ? { ...current, settings } : current));
+      setSettingsPath(settings.codexPath ?? "");
+      const info = await backend.inspectCodexCli();
+      setCliInfo(info);
+      showToast(setToast, path.trim() ? "Codex CLI 路径已保存" : "已切换为自动检测");
+    } catch (error) {
+      const message = String(error);
+      setCliInfo({ available: false, source: null, path: null, message });
+      setCliError(message);
+    } finally {
+      setSettingsSaving(false);
     }
   };
 
@@ -226,6 +320,7 @@ function App() {
         view={view}
         diaryCount={snapshot.diaries.length}
         reflectionCount={reflectionCount}
+        onOpenSettings={() => setSettingsOpen(true)}
         onToggleView={() => setView(view === "diary" ? "control" : "diary")}
       />
 
@@ -238,15 +333,24 @@ function App() {
               <strong>{status.title}</strong>
               <span>{status.detail}</span>
             </div>
-            <WorkPulseIcon />
+            {cliInfo && !cliInfo.available ? (
+              <button className="codex-status__action" type="button" onClick={() => setCliError(cliInfo.message)}>
+                查看解决方案
+              </button>
+            ) : (
+              <WorkPulseIcon />
+            )}
             <button
               className="icon-button icon-button--quiet"
               type="button"
-              onClick={() => void refreshWindow()}
-              disabled={detecting}
+              onClick={() => {
+                void refreshWindow();
+                void refreshCliInfo(false);
+              }}
+              disabled={detecting || cliChecking}
               title="重新检测"
             >
-              <RefreshCw className={detecting ? "spin" : ""} size={17} />
+              <RefreshCw className={detecting || cliChecking ? "spin" : ""} size={17} />
             </button>
           </section>
 
@@ -344,7 +448,191 @@ function App() {
         />
       )}
 
+      {settingsOpen && (
+        <CodexSettingsDialog
+          path={settingsPath}
+          info={cliInfo}
+          saving={settingsSaving}
+          onPathChange={setSettingsPath}
+          onBrowse={() => void browseCodexCli()}
+          onUseAutomatic={() => void persistCodexPath("")}
+          onSave={() => void persistCodexPath(settingsPath)}
+          onShowHelp={() => cliInfo && setCliError(cliInfo.message)}
+          onClose={() => setSettingsOpen(false)}
+        />
+      )}
+
+      {cliError && (
+        <CodexErrorDialog
+          message={cliError}
+          onOpenSettings={() => {
+            setCliError(null);
+            setSettingsOpen(true);
+          }}
+          onCopy={() => {
+            const issue = parseCodexIssue(cliError);
+            if (!issue.copyable) return;
+            void copyText(issue.prompt)
+              .then(() => showToast(setToast, "已复制：请粘贴到 Codex 对话框并发送"))
+              .catch(() => showToast(setToast, "复制失败，请手动选择文本"));
+          }}
+          onRetry={() => {
+            setCliError(null);
+            cliFailurePromptedRef.current = false;
+            void refreshCliInfo(true);
+          }}
+          onClose={() => setCliError(null)}
+        />
+      )}
+
       {toast && <div className="toast" role="status">{toast}</div>}
+    </div>
+  );
+}
+
+interface CodexSettingsDialogProps {
+  path: string;
+  info: CodexCliInfo | null;
+  saving: boolean;
+  onPathChange: (path: string) => void;
+  onBrowse: () => void;
+  onUseAutomatic: () => void;
+  onSave: () => void;
+  onShowHelp: () => void;
+  onClose: () => void;
+}
+
+function CodexSettingsDialog({
+  path,
+  info,
+  saving,
+  onPathChange,
+  onBrowse,
+  onUseAutomatic,
+  onSave,
+  onShowHelp,
+  onClose,
+}: CodexSettingsDialogProps) {
+  return (
+    <div className="dialog-backdrop" role="presentation" onMouseDown={(event) => {
+      if (event.target === event.currentTarget) onClose();
+    }}>
+      <section className="settings-dialog" role="dialog" aria-modal="true" aria-labelledby="settings-title">
+        <header className="dialog-header">
+          <div>
+            <small>SETTINGS</small>
+            <h2 id="settings-title">Codex CLI</h2>
+          </div>
+          <button type="button" onClick={onClose} aria-label="关闭设置" title="关闭">
+            <X size={18} />
+          </button>
+        </header>
+
+        <p className="settings-dialog__recommendation">
+          推荐优先使用独立安装的外部 CLI。桌面客户端内部 CLI 只在外部 CLI 不可用时作为备用。
+        </p>
+
+        <div className={`cli-detection ${info?.available ? "is-ready" : "is-unavailable"}`}>
+          {info?.available ? <Check size={16} /> : <LoaderCircle className={!info ? "spin" : ""} size={16} />}
+          <div>
+            <strong>{info ? parseCodexIssue(info.message).summary : "正在自动检测 Codex CLI"}</strong>
+            {info?.path && <span title={info.path}>{info.path}</span>}
+            {info && !info.available && (
+              <button className="cli-detection__help" type="button" onClick={onShowHelp}>
+                查看并复制解决提示
+              </button>
+            )}
+          </div>
+        </div>
+
+        <label className="settings-field">
+          <span>手动指定 CLI（可选）</span>
+          <div className="settings-path-row">
+            <input
+              type="text"
+              value={path}
+              onChange={(event) => onPathChange(event.target.value)}
+              placeholder="留空时自动检测"
+              spellCheck={false}
+            />
+            <button type="button" onClick={onBrowse} title="浏览文件">
+              <FolderOpen size={17} />
+              浏览
+            </button>
+          </div>
+        </label>
+
+        <footer className="dialog-actions">
+          <button className="dialog-button dialog-button--quiet" type="button" onClick={onUseAutomatic} disabled={saving}>
+            自动检测
+          </button>
+          <button className="dialog-button dialog-button--primary" type="button" onClick={onSave} disabled={saving}>
+            {saving ? "保存中…" : "保存"}
+          </button>
+        </footer>
+      </section>
+    </div>
+  );
+}
+
+interface CodexErrorDialogProps {
+  message: string;
+  onCopy: () => void;
+  onOpenSettings: () => void;
+  onRetry: () => void;
+  onClose: () => void;
+}
+
+function CodexErrorDialog({ message, onCopy, onOpenSettings, onRetry, onClose }: CodexErrorDialogProps) {
+  const issue = parseCodexIssue(message);
+  return (
+    <div className="dialog-backdrop dialog-backdrop--error" role="presentation">
+      <section className="cli-error-dialog" role="alertdialog" aria-modal="true" aria-labelledby="cli-error-title">
+        <header className="dialog-header">
+          <div>
+            <small>{issue.copyable ? "CODEX CLI" : "VIBEKARMA"}</small>
+            <h2 id="cli-error-title">{issue.copyable ? "Codex CLI 需要处理" : "应用检测遇到问题"}</h2>
+          </div>
+          <button type="button" onClick={onClose} aria-label="关闭错误信息" title="关闭">
+            <X size={18} />
+          </button>
+        </header>
+        {issue.copyable ? (
+          <div className="cli-error-guide">
+            <strong>两步解决</strong>
+            <div><b>1</b><span>点击右下角“复制解决提示”</span></div>
+            <div><b>2</b><span>粘贴到 Codex 对话框并发送</span></div>
+            <em>Codex 会帮你完成安装或修复。</em>
+          </div>
+        ) : (
+          <div className="cli-error-guide cli-error-guide--internal">
+            <strong>这是 VibeKarma 自身的检测错误</strong>
+            <em>无需安装或修改 Codex CLI，请点击“重新检测”。</em>
+          </div>
+        )}
+        <div className="cli-error-summary">
+          <small>检测结果</small>
+          <span>{issue.summary}</span>
+        </div>
+        <footer className="dialog-actions">
+          {issue.copyable ? (
+            <>
+              <button className="dialog-button dialog-button--quiet" type="button" onClick={onOpenSettings}>
+                打开设置
+              </button>
+              <button className="dialog-button dialog-button--primary" type="button" onClick={onCopy}>
+                <Copy size={15} />
+                复制解决提示
+              </button>
+            </>
+          ) : (
+            <button className="dialog-button dialog-button--primary" type="button" onClick={onRetry}>
+              <RefreshCw size={15} />
+              重新检测
+            </button>
+          )}
+        </footer>
+      </section>
     </div>
   );
 }
@@ -354,6 +642,7 @@ interface KarmaHeaderProps {
   diaryCount: number;
   reflectionCount: number;
   diaryDisabled?: boolean;
+  onOpenSettings?: () => void;
   onToggleView: () => void;
 }
 
@@ -362,6 +651,7 @@ function KarmaHeader({
   diaryCount,
   reflectionCount,
   diaryDisabled = false,
+  onOpenSettings,
   onToggleView,
 }: KarmaHeaderProps) {
   const handleDragRegionDoubleClick = (target: EventTarget | null) => {
@@ -404,6 +694,17 @@ function KarmaHeader({
         data-tauri-drag-region
         onDoubleClick={(event) => handleDragRegionDoubleClick(event.target)}
       />
+      {onOpenSettings && (
+        <button
+          className="header-settings"
+          type="button"
+          onClick={onOpenSettings}
+          title="Codex CLI 设置"
+          aria-label="打开 Codex CLI 设置"
+        >
+          <Settings2 size={17} />
+        </button>
+      )}
       <button
         className={`diary-command ${reflectionCount > 0 ? "is-writing" : ""}`}
         type="button"
@@ -547,7 +848,16 @@ async function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T
   }
 }
 
-function windowStatus(info: CodexWindowInfo | null, detecting: boolean) {
+function appStatus(
+  info: CodexWindowInfo | null,
+  detecting: boolean,
+  cliInfo: CodexCliInfo | null,
+  cliChecking: boolean,
+) {
+  if (cliChecking && !cliInfo) return { tone: "checking", title: "正在检查 Codex CLI", detail: "确认日记功能是否可用" };
+  if (cliInfo && !cliInfo.available) {
+    return { tone: "offline", title: "Codex CLI 需要处理", detail: "点击查看解决方案" };
+  }
   if (detecting && !info) return { tone: "checking", title: "正在寻找 Codex", detail: "检查桌面窗口" };
   if (!info?.found) return { tone: "offline", title: "没有找到 Codex", detail: "请先打开 Codex 桌面客户端" };
   return { tone: "ready", title: "Codex 已就绪", detail: "动效结束后会静默写入日记" };
@@ -596,6 +906,21 @@ function showToast(
 ) {
   setter(message);
   window.setTimeout(() => setter((current) => (current === message ? null : current)), 3600);
+}
+
+async function copyText(value: string) {
+  if (navigator.clipboard?.writeText) {
+    await navigator.clipboard.writeText(value);
+    return;
+  }
+  const textarea = document.createElement("textarea");
+  textarea.value = value;
+  textarea.style.position = "fixed";
+  textarea.style.opacity = "0";
+  document.body.appendChild(textarea);
+  textarea.select();
+  document.execCommand("copy");
+  textarea.remove();
 }
 
 export default App;

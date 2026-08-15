@@ -14,7 +14,7 @@ VibeKarma 是一个用 Tauri 2、React 19 和 Rust 构建的 Codex 桌面伴侣�
 - Intel Mac：下载 `VibeKarma_*_x64.dmg`
 （滑到最底下的Assets展开）
 
-当前版本为预发布版本，安装包尚未进行代码签名。Windows SmartScreen 或 macOS Gatekeeper 可能显示安全提醒。使用前需要在本机安装并登录 Codex CLI。
+当前版本为预发布版本，安装包尚未进行代码签名。Windows SmartScreen 或 macOS Gatekeeper 可能显示安全提醒。推荐在本机独立安装并登录 Codex CLI；未找到外部 CLI 时，VibeKarma 会尝试使用 Codex 桌面客户端内部 CLI 作为备用。
 
 ## 当前功能
 
@@ -36,6 +36,9 @@ VibeKarma 是一个用 Tauri 2、React 19 和 Rust 构建的 Codex 桌面伴侣�
 ### 反省日记
 
 - 每次有效奖励或惩罚都会静默记录一次反馈，并异步启动独立的 Codex CLI 日记进程。
+- CLI 按“手动指定 → 外部独立 CLI（推荐）→ 桌面客户端内部 CLI（备用）”的顺序自动查找。
+- 控制栏设置按钮可以切换自动检测，或手动选择 Codex CLI 文件。
+- 找不到或无法运行 CLI 时，错误窗口会提供一段可直接复制给 Codex 的安装求助提示。
 - 当前只有“奖励日记”和“挨打日记”，没有自动生成的“收工日记”。
 - 日记参考当前 Codex 窗口的近期内容，以及最近三篇日记，用来保持角色和旧梗的连续性。
 - 原因输入是可选的；留空时 Codex 根据窗口上下文判断，不再传递冗余的“用户补充”字段。
@@ -67,6 +70,9 @@ VibeKarma 是一个用 Tauri 2、React 19 和 Rust 构建的 Codex 桌面伴侣�
 - `src-tauri/src/codex_window.rs`：跨平台窗口识别入口、覆盖层定位和窗口模式。
 - `src-tauri/src/codex_window/macos.rs`：使用 macOS Core Graphics 识别并跟随 Codex 窗口。
 - `src-tauri/src/codex.rs`：反馈队列、日记提示词和独立 Codex CLI 调用。
+- `src-tauri/src/codex/resolver.rs`：统一的 CLI 优先级、状态和错误提示。
+- `src-tauri/src/codex/windows.rs`：Windows 外部 CLI 与桌面客户端备用 CLI 发现。
+- `src-tauri/src/codex/macos.rs`：macOS 外部 CLI 与应用 Bundle 备用 CLI 发现。
 - `src-tauri/src/storage.rs`：设置、事件日志和 SQLite 日记存储。
 
 主控制器默认为 `580 × 400`，打开日记本时切换为 `1000 × 700`。透明覆盖窗口只在奖惩互动期间显示。
@@ -78,10 +84,27 @@ VibeKarma 是一个用 Tauri 2、React 19 和 Rust 构建的 Codex 桌面伴侣�
 - pnpm 10。
 - Rust stable 工具链。
 - Windows 开发需要 Visual C++ Build Tools、Windows SDK 和 WebView2 Runtime；macOS 开发需要 Xcode Command Line Tools。
-- 已安装并可正常运行的 Codex CLI。
+- 推荐安装并登录可正常运行的外部 Codex CLI；桌面客户端内部 CLI 仅作为兼容性备用。
 - 已打开且可见的 Codex 桌面客户端窗口。
 
-VibeKarma 不保存 OpenAI API Key。日记进程继承本机 Codex CLI 已有的登录、Provider 和 `CODEX_HOME` 配置；本地 `settings.json` 也可以指定 Codex 可执行文件、独立 `CODEX_HOME` 或额外环境变量。
+VibeKarma 不保存 OpenAI API Key。日记进程继承本机 Codex CLI 已有的登录、Provider 和 `CODEX_HOME` 配置；应用设置可以手动指定 Codex 可执行文件，本地 `settings.json` 仍可配置独立 `CODEX_HOME` 或额外环境变量。
+
+## Codex CLI 发现顺序
+
+Windows 和 macOS 使用相同优先级：
+
+```text
+用户手动指定的 CLI
+  → 外部独立安装的 CLI（推荐）
+  → Codex 桌面客户端内部 CLI（兼容性备用）
+  → 显示包含安装求助提示的错误信息
+```
+
+外部 CLI 是公开、稳定的调用入口。桌面客户端内部文件可能随客户端更新改变，因此只用于兜底。VibeKarma 不会复制、打包或重新分发任何 Codex 二进制文件。
+
+自动检测会用短超时的 `codex --version` 检查候选 CLI；损坏的外部 CLI 会被自动跳过，再尝试其他外部安装或桌面客户端内部 CLI。旧设置中的 `codex`、`codex.cmd` 等命令名仍会从系统 `PATH` 解析，无需用户重新选择文件。
+
+Windows 商店版桌面客户端位于系统管理的 `WindowsApps` 目录，其内部 CLI 可能不允许其他应用直接启动。VibeKarma 会把这种情况识别为“检测到但不可用”，并引导安装外部 CLI；请勿通过取得目录所有权或修改系统 ACL 来绕过限制。
 
 ## 本地开发
 
@@ -123,11 +146,11 @@ vibekarma.sqlite3
 
 ## 发布
 
-推送 `v*` 标签会触发 GitHub Actions，创建草稿 Release，并尝试构建 Windows x64、Linux x64、macOS Intel 和 macOS Apple Silicon 安装包。Windows 与 macOS 都会识别并跟随各自平台上的 Codex 桌面窗口；Linux 当前只提供基础界面，不支持互动覆盖层。
+推送 `v*` 标签会触发 GitHub Actions，创建草稿 Release，并构建四种安装包：Windows x64 NSIS、Windows x64 MSI、macOS Intel DMG 和 macOS Apple Silicon DMG。Windows 与 macOS 都会识别并跟随各自平台上的 Codex 桌面窗口。
 
 ```powershell
-git tag v0.1.0
-git push origin v0.1.0
+git tag v0.1.1
+git push origin v0.1.1
 ```
 
 未配置代码签名时，Windows SmartScreen 和 macOS Gatekeeper 可能提示应用未签名。签名证书、SSH 私钥、API Key 和本地认证文件都不应提交到仓库。

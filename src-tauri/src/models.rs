@@ -1,23 +1,13 @@
 use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AppSettings {
     pub codex_path: Option<String>,
     pub codex_home: Option<String>,
     #[serde(default)]
     pub extra_env: BTreeMap<String, String>,
-}
-
-impl Default for AppSettings {
-    fn default() -> Self {
-        Self {
-            codex_path: None,
-            codex_home: None,
-            extra_env: BTreeMap::new(),
-        }
-    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -33,6 +23,15 @@ pub struct AppSnapshot {
 pub struct FeedbackRequest {
     pub kind: FeedbackKind,
     pub reason: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CodexCliInfo {
+    pub available: bool,
+    pub source: Option<String>,
+    pub path: Option<String>,
+    pub message: String,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

@@ -87,7 +87,7 @@ button:disabled { cursor: not-allowed; opacity: 0.46; }
   position: relative;
   z-index: 20;
   display: grid;
-  grid-template-columns: auto minmax(20px, 1fr) auto auto;
+  grid-template-columns: auto minmax(20px, 1fr) auto auto auto;
   align-items: center;
   gap: 10px;
   padding-left: 14px;
@@ -258,6 +258,26 @@ button:disabled { cursor: not-allowed; opacity: 0.46; }
 }
 .icon-button--quiet:not(:disabled):hover { color: var(--forest); background: rgb(23 61 51 / 6%); }
 
+.header-settings {
+  display: grid;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  color: #eadbbd;
+  background: transparent;
+  border: 1px solid rgb(222 197 144 / 30%);
+  border-radius: 8px;
+  cursor: pointer;
+  place-items: center;
+  transition: color 0.16s ease, background 0.16s ease, border-color 0.16s ease;
+}
+
+.header-settings:hover {
+  color: #173d33;
+  background: #f6edd8;
+  border-color: #f6edd8;
+}
+
 .diary-command {
   justify-self: end;
   gap: 8px;
@@ -415,6 +435,20 @@ button:disabled { cursor: not-allowed; opacity: 0.46; }
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+.codex-status__action {
+  width: 92px;
+  padding: 7px 8px;
+  color: #7d2f35;
+  font-size: 9px;
+  font-weight: 700;
+  background: #fbebe6;
+  border: 1px solid #dfb6ae;
+  border-radius: 9px;
+  cursor: pointer;
+}
+
+.codex-status__action:hover { background: #f7ddd6; }
 
 .work-pulse-icon { width: 92px; height: 32px; color: #466c5d; overflow: visible; }
 .work-pulse-icon path { fill: none; stroke-linecap: round; stroke-linejoin: round; }
@@ -1229,6 +1263,254 @@ button:disabled { cursor: not-allowed; opacity: 0.46; }
 }
 .book-shell__ribbon--reward { left: 29%; background: #908037; }
 .book-shell__ribbon--correction { right: 29%; background: #853a3b; }
+
+.dialog-backdrop {
+  position: fixed;
+  z-index: 260;
+  display: grid;
+  padding: 18px;
+  background: rgb(14 29 25 / 55%);
+  inset: 0;
+  place-items: center;
+  backdrop-filter: blur(3px);
+}
+
+.dialog-backdrop--error { z-index: 320; }
+
+.settings-dialog,
+.cli-error-dialog {
+  display: flex;
+  min-width: 0;
+  width: min(460px, calc(100vw - 36px));
+  max-height: calc(100vh - 36px);
+  flex-direction: column;
+  gap: 14px;
+  padding: 18px;
+  color: var(--ink);
+  background:
+    radial-gradient(circle at 90% 0%, rgb(181 138 52 / 12%), transparent 32%),
+    var(--paper-light);
+  border: 1px solid #cdbf9f;
+  border-radius: 14px;
+  box-shadow: 0 24px 70px rgb(7 22 18 / 34%);
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+
+.cli-error-dialog { width: min(500px, calc(100vw - 36px)); }
+
+.dialog-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+}
+
+.dialog-header small {
+  color: var(--gold);
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+}
+
+.dialog-header h2 {
+  margin: 3px 0 0;
+  color: var(--forest);
+  font-family: Georgia, "Microsoft YaHei", serif;
+  font-size: 20px;
+}
+
+.dialog-header > button {
+  display: grid;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  color: #77776f;
+  background: transparent;
+  border: 0;
+  border-radius: 7px;
+  cursor: pointer;
+  place-items: center;
+}
+
+.dialog-header > button:hover { color: var(--forest); background: rgb(23 61 51 / 7%); }
+
+.settings-dialog__recommendation,
+.cli-error-dialog > p {
+  margin: 0;
+  color: #65675f;
+  font-size: 11px;
+  line-height: 1.65;
+}
+
+.cli-detection {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
+  gap: 9px;
+  padding: 11px 12px;
+  color: #735e20;
+  background: #f3ead2;
+  border: 1px solid #dfcea3;
+  border-radius: 9px;
+}
+
+.cli-detection.is-ready {
+  color: #245346;
+  background: #e6eee8;
+  border-color: #bfd0c5;
+}
+
+.cli-detection > svg { margin-top: 1px; }
+.cli-detection > div { display: flex; min-width: 0; flex-direction: column; gap: 4px; }
+.cli-detection strong {
+  min-width: 0;
+  font-size: 11px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+.cli-detection span {
+  overflow: hidden;
+  color: #73766e;
+  font-family: Consolas, "SFMono-Regular", monospace;
+  font-size: 9px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cli-detection__help {
+  align-self: flex-start;
+  padding: 0;
+  color: #8a5d22;
+  font-size: 9px;
+  font-weight: 700;
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+}
+
+.cli-detection__help:hover { text-decoration: underline; }
+
+.settings-field { display: flex; flex-direction: column; gap: 7px; }
+.settings-field > span { color: #52564f; font-size: 10px; font-weight: 700; }
+
+.settings-path-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; }
+.settings-path-row input {
+  min-width: 0;
+  height: 36px;
+  padding: 0 10px;
+  color: #303832;
+  font-family: Consolas, "SFMono-Regular", monospace;
+  font-size: 10px;
+  background: #fffdf7;
+  border: 1px solid #cec4b1;
+  border-radius: 8px;
+  outline: none;
+}
+
+.settings-path-row input:focus { border-color: #8a7436; box-shadow: 0 0 0 2px rgb(181 138 52 / 13%); }
+.settings-path-row > button,
+.dialog-button {
+  display: inline-flex;
+  height: 36px;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 0 12px;
+  font-size: 10px;
+  font-weight: 700;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.settings-path-row > button {
+  color: var(--forest);
+  background: #f2ead9;
+  border: 1px solid #cfc3aa;
+}
+
+.dialog-actions { display: flex; justify-content: flex-end; gap: 8px; }
+.dialog-button--quiet { color: #5f625c; background: transparent; border: 1px solid #c9c2b3; }
+.dialog-button--primary { color: #fff8e9; background: var(--forest); border: 1px solid var(--forest); }
+.dialog-button:disabled { cursor: wait; opacity: 0.55; }
+
+.cli-error-guide {
+  display: grid;
+  min-width: 0;
+  gap: 8px;
+  padding: 12px 14px;
+  color: #244d41;
+  background: #e7f0e9;
+  border: 1px solid #abc4b5;
+  border-radius: 9px;
+  box-shadow: inset 3px 0 0 #477663;
+}
+
+.cli-error-guide > strong {
+  color: var(--forest);
+  font-size: 12px;
+}
+
+.cli-error-guide > div {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.cli-error-guide b {
+  display: grid;
+  width: 18px;
+  height: 18px;
+  flex: 0 0 18px;
+  color: #fffaf0;
+  font-size: 9px;
+  background: var(--forest);
+  border-radius: 50%;
+  place-items: center;
+}
+
+.cli-error-guide em {
+  color: #577068;
+  font-size: 10px;
+  font-style: normal;
+}
+
+.cli-error-guide--internal {
+  color: #704f27;
+  background: #f4ead5;
+  border-color: #dcc69c;
+  box-shadow: inset 3px 0 0 #af7b32;
+}
+
+.cli-error-guide--internal > strong { color: #6f4b20; }
+
+.cli-error-summary {
+  display: flex;
+  min-width: 0;
+  margin: 0;
+  flex-direction: column;
+  gap: 4px;
+  padding: 9px 11px;
+  color: #705b57;
+  font-size: 10px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  background: #f6efeb;
+  border: 1px solid #e2d1ca;
+  border-radius: 8px;
+}
+
+.cli-error-summary small {
+  color: #9b6c62;
+  font-size: 8px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+}
 
 .toast {
   position: fixed;

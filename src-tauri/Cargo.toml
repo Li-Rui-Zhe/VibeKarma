@@ -1,6 +1,6 @@
 [package]
 name = "vibekarma"
-version = "0.1.0"
+version = "0.1.1"
 description = "A warm, feedback-driven desktop client for Codex"
 authors = ["LiRuiZhe"]
 edition = "2021"
@@ -23,3 +23,15 @@ tauri = { version = "2", features = ["macos-private-api"] }
 tauri-plugin-dialog = "2"
 tokio = { version = "1", features = ["io-util", "macros", "process", "rt-multi-thread", "sync", "time"] }
 uuid = { version = "1", features = ["serde", "v4"] }
+
+[target.'cfg(target_os = "windows")'.dependencies]
+windows = { version = "0.61.3", features = [
+  "ApplicationModel",
+  "Foundation_Collections",
+  "Management_Deployment",
+  "Storage",
+  "Storage_Search",
+] }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+fix-path-env = { git = "https://github.com/tauri-apps/fix-path-env-rs", rev = "c4c45d503ea115a839aae718d02f79e7c7f0f673" }

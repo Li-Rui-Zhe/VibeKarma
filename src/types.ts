@@ -30,6 +30,13 @@ export interface FeedbackRequest {
   reason: string;
 }
 
+export interface CodexCliInfo {
+  available: boolean;
+  source: "userConfigured" | "externalCli" | "desktopBundled" | null;
+  path: string | null;
+  message: string;
+}
+
 export interface FeedbackReceipt {
   delivery: "silent";
   threadId: string;

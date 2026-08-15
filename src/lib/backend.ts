@@ -3,6 +3,7 @@ import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import type {
   AppSettings,
   AppSnapshot,
+  CodexCliInfo,
   CodexLogEvent,
   CodexWindowInfo,
   DiaryEntry,
@@ -72,6 +73,17 @@ export const backend = {
     return isTauriRuntime() ? call<AppSettings>("save_settings", { settings }) : settings;
   },
 
+  async inspectCodexCli(): Promise<CodexCliInfo> {
+    return isTauriRuntime()
+      ? call<CodexCliInfo>("inspect_codex_cli")
+      : {
+          available: true,
+          source: "externalCli",
+          path: IS_DEMO_MACOS ? "/opt/homebrew/bin/codex" : "C:\\Users\\demo\\AppData\\Roaming\\npm\\codex.cmd",
+          message: "正在使用：外部 Codex CLI（推荐）",
+        };
+  },
+
   async inspectCodexWindow(): Promise<CodexWindowInfo> {
     return isTauriRuntime()
       ? call<CodexWindowInfo>("inspect_codex_window")
@@ -113,6 +125,8 @@ export const backend = {
   },
 
 };
+
+const IS_DEMO_MACOS = /Macintosh|Mac OS X/i.test(navigator.userAgent);
 
 export async function subscribeOverlayAction(
   handler: (payload: OverlayAction) => void,

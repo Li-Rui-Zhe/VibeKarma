@@ -1,25 +1,24 @@
-#[cfg(not(target_os = "windows"))]
-use std::path::PathBuf;
-use std::{path::Path, process::Stdio, sync::Arc, time::Duration};
+use std::{process::Stdio, sync::Arc, time::Duration};
 
 use chrono::{Local, SecondsFormat};
 use serde_json::{json, Value};
 use tauri::{AppHandle, Emitter};
-use tokio::{io::AsyncWriteExt, process::Command, sync::Semaphore, time::timeout};
+use tokio::{io::AsyncWriteExt, sync::Semaphore, time::timeout};
 
 use crate::{
-    models::{AppSettings, AppSnapshot, CodexLogEvent, DiaryDraft, FeedbackRequest},
+    models::{AppSettings, AppSnapshot, CodexCliInfo, CodexLogEvent, DiaryDraft, FeedbackRequest},
     storage::Storage,
 };
 
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", test))]
 mod macos;
+mod resolver;
+#[cfg(target_os = "windows")]
+mod windows;
 
 const REFLECTION_TIMEOUT: Duration = Duration::from_secs(300);
 const MAX_CONTEXT_CHARS: usize = 18_000;
 const DIARY_TITLE_MAX_CHARS: usize = 20;
-#[cfg(target_os = "windows")]
-const CREATE_NO_WINDOW: u32 = 0x0800_0000;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum DiaryIntensity {
@@ -86,10 +85,24 @@ impl CodexManager {
         }
     }
 
-    pub fn save_settings(&self, settings: AppSettings) -> Result<AppSettings, String> {
+    pub async fn save_settings(&self, settings: AppSettings) -> Result<AppSettings, String> {
         validate_settings(&settings)?;
+        if settings
+            .codex_path
+            .as_deref()
+            .is_some_and(|path| !path.trim().is_empty())
+        {
+            let info = resolver::inspect(&settings).await;
+            if !info.available {
+                return Err(info.message);
+            }
+        }
         self.storage.save_settings(&settings)?;
         Ok(settings)
+    }
+
+    pub async fn codex_cli_info(&self) -> CodexCliInfo {
+        resolver::inspect(&self.storage.load_settings()).await
     }
 
     pub fn list_diaries(&self) -> Vec<crate::models::DiaryEntry> {
@@ -179,7 +192,7 @@ impl CodexManager {
 
     async fn run_codex_diary_prompt(&self, prompt: String) -> Result<String, String> {
         let settings = self.storage.load_settings();
-        let mut command = build_codex_exec_command(&settings, self.storage.root())?;
+        let mut command = resolver::build_exec_command(&settings, self.storage.root()).await?;
         command
             .current_dir(self.storage.root())
             .stdin(Stdio::piped())
@@ -197,9 +210,9 @@ impl CodexManager {
             command.env(key, value);
         }
 
-        let mut child = command
-            .spawn()
-            .map_err(|error| format!("无法启动 Codex 日记线程：{error}"))?;
+        let mut child = command.spawn().map_err(|error| {
+            resolver::with_install_help(format!("无法启动 Codex 日记线程：{error}"))
+        })?;
         let mut stdin = child
             .stdin
             .take()
@@ -216,10 +229,10 @@ impl CodexManager {
             .map_err(|error| format!("Codex 日记线程异常结束：{error}"))?;
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
-            return Err(format!(
+            return Err(resolver::with_install_help(format!(
                 "Codex CLI 返回失败：{}",
-                truncate(stderr.trim(), 500)
-            ));
+                truncate(stderr.trim(), 220)
+            )));
         }
         let raw = String::from_utf8_lossy(&output.stdout).trim().to_owned();
         if raw.is_empty() {
@@ -256,88 +269,6 @@ impl CodexManager {
                 message: message.into(),
             },
         );
-    }
-}
-
-fn build_codex_exec_command(settings: &AppSettings, workspace: &Path) -> Result<Command, String> {
-    let configured = settings
-        .codex_path
-        .as_deref()
-        .map(str::trim)
-        .filter(|value| !value.is_empty());
-    if let Some(path) = configured {
-        if path
-            .chars()
-            .any(|character| matches!(character, '\n' | '\r' | '"'))
-        {
-            return Err("Codex 路径包含不允许的字符".to_owned());
-        }
-    }
-
-    let workspace = workspace.to_string_lossy().into_owned();
-    let args = [
-        "exec",
-        "--ephemeral",
-        "--sandbox",
-        "read-only",
-        "--skip-git-repo-check",
-        "--ignore-rules",
-        "--color",
-        "never",
-        "-C",
-        workspace.as_str(),
-        "-",
-    ];
-
-    #[cfg(target_os = "windows")]
-    {
-        let executable = configured.unwrap_or("codex.cmd");
-        let is_batch = executable.to_ascii_lowercase().ends_with(".cmd")
-            || executable.to_ascii_lowercase().ends_with(".bat")
-            || configured.is_none();
-        if is_batch {
-            let mut command = Command::new("cmd.exe");
-            command
-                .arg("/d")
-                .arg("/c")
-                .arg(executable)
-                .args(args)
-                .creation_flags(CREATE_NO_WINDOW);
-            return Ok(command);
-        }
-        let mut command = Command::new(executable);
-        command.args(args).creation_flags(CREATE_NO_WINDOW);
-        Ok(command)
-    }
-
-    #[cfg(not(target_os = "windows"))]
-    {
-        #[cfg(target_os = "macos")]
-        let executable = macos::resolve_codex_executable(configured);
-        #[cfg(not(target_os = "macos"))]
-        let executable = PathBuf::from(configured.unwrap_or("codex"));
-
-        let mut command = Command::new(&executable);
-        command.args(args);
-        prepend_executable_dir_to_path(&mut command, &executable);
-        Ok(command)
-    }
-}
-
-#[cfg(not(target_os = "windows"))]
-fn prepend_executable_dir_to_path(command: &mut Command, executable: &Path) {
-    let Some(parent) = executable
-        .parent()
-        .filter(|parent| !parent.as_os_str().is_empty())
-    else {
-        return;
-    };
-    let mut paths = vec![parent.to_path_buf()];
-    if let Some(current) = std::env::var_os("PATH") {
-        paths.extend(std::env::split_paths(&current));
-    }
-    if let Ok(path) = std::env::join_paths(paths) {
-        command.env("PATH", path);
     }
 }
 
@@ -437,7 +368,7 @@ fn fit_diary_title(job: &ReflectionJob, title: &str) -> String {
         .strip_prefix(&prefix)
         .or_else(|| title.strip_prefix(&job.kind))
         .unwrap_or(title)
-        .trim_start_matches(|character| matches!(character, '：' | ':' | ' '));
+        .trim_start_matches(['：', ':', ' ']);
     let remaining = DIARY_TITLE_MAX_CHARS.saturating_sub(prefix.chars().count());
     format!(
         "{}{}",
@@ -483,7 +414,7 @@ fn truncate(value: &str, max_chars: usize) -> String {
         return value.to_owned();
     }
     let mut output = value.chars().take(max_chars).collect::<String>();
-    output.push_str("…");
+    output.push('…');
     output
 }
 

@@ -16,12 +16,13 @@ jobs:
         include:
           - platform: windows-latest
             label: Windows x64
-          - platform: ubuntu-22.04
-            label: Linux x64
+            args: --bundles nsis,msi
           - platform: macos-15-intel
             label: macOS Intel
+            args: --bundles dmg
           - platform: macos-15
             label: macOS Apple Silicon
+            args: --bundles dmg
     runs-on: ${{ matrix.platform }}
     steps:
       - uses: actions/checkout@v4
@@ -41,12 +42,6 @@ jobs:
         with:
           workspaces: src-tauri -> target
 
-      - name: Install Linux system dependencies
-        if: matrix.platform == 'ubuntu-22.04'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
-
       - run: pnpm install --frozen-lockfile
 
       - uses: tauri-apps/tauri-action@v0
@@ -55,7 +50,8 @@ jobs:
         with:
           tagName: ${{ github.ref_name }}
           releaseName: "VibeKarma ${{ github.ref_name }}"
-          releaseBody: "VibeKarma desktop builds for ${{ matrix.label }}. A local Codex CLI is required."
+          releaseBody: "VibeKarma desktop builds for Windows x64 and macOS (Intel and Apple Silicon). A separately installed Codex CLI is recommended; the desktop app's internal CLI is used only as a compatibility fallback."
           releaseDraft: true
           prerelease: false
+          args: ${{ matrix.args }}
 

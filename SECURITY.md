@@ -10,6 +10,7 @@ Please report vulnerabilities privately to the repository owner before opening a
 
 - The React frontend cannot execute arbitrary shell commands. Native operations are exposed through a fixed set of Tauri commands.
 - Authentication remains owned by the locally installed Codex CLI. VibeKarma does not copy API keys or Codex authentication files into its data store.
+- VibeKarma prefers a separately installed Codex CLI. A CLI found inside the Codex desktop application is a best-effort fallback only; no Codex binary is copied, bundled, or redistributed.
 - The current reward and punishment flow does not inject text into, interrupt, or modify the active Codex task.
 - The transparent interaction layer is positioned only after a visible Codex desktop window has been identified.
 - Diary generation runs in an ephemeral Codex CLI process with a `read-only` sandbox and `never` approval policy.
