@@ -52,7 +52,8 @@ jobs:
               if (run.path !== path || run.head_branch !== branch || run.head_sha !== request.commit || run.event !== 'push' || run.conclusion !== 'success' || run.status !== 'completed') throw new Error(`Verification run ${id} does not match the tested release.`);
             }
             const releases = await github.paginate(github.rest.repos.listReleases, { owner, repo, per_page: 100 });
-            const release = releases.find(item => item.tag_name === tag);
+            if (!Number.isSafeInteger(request.releaseId) || request.releaseId <= 0) throw new Error('An explicit existing draft release ID is required.');
+            const release = releases.find(item => item.id === request.releaseId && (item.tag_name === tag || (item.draft && item.tag_name.startsWith('untagged-') && item.name === `VibeKarma ${tag}`)));
             if (!release) throw new Error(`Existing draft was not found; no release or assets were changed. Visible release metadata: ${JSON.stringify(releases.map(item => ({ id: item.id, tag: item.tag_name, name: item.name, draft: item.draft })))}`);
             const assets = await github.paginate(github.rest.repos.listReleaseAssets, { owner, repo, release_id: release.id, per_page: 100 });
             const expected = [
@@ -70,7 +71,7 @@ jobs:
               await core.summary.addLink('Published release', release.html_url).write();
               return;
             }
-            const { data: published } = await github.rest.repos.updateRelease({ owner, repo, release_id: release.id, name: `VibeKarma ${tag}`, body, draft: false, prerelease: false, make_latest: 'true' });
+            const { data: published } = await github.rest.repos.updateRelease({ owner, repo, release_id: release.id, tag_name: tag, target_commitish: request.commit, name: `VibeKarma ${tag}`, body, draft: false, prerelease: false, make_latest: 'true' });
             if (published.draft || published.prerelease || published.tag_name !== tag) throw new Error('GitHub did not return the expected published release.');
             core.info(`Published: ${published.html_url}`);
             await core.summary.addLink('Published release', published.html_url).write();

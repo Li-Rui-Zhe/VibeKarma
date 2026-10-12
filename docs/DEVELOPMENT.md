@@ -116,9 +116,11 @@ macOS 读取聊天内容需要辅助功能授权；未授权或读取失败不�
 
 `.github/workflows/release.yml` 在推送 `v*` 标签时构建 Windows x64 NSIS/MSI、macOS Intel DMG 和 Apple Silicon DMG，生成草稿 Release。检查安装包及说明后，再发布草稿。
 
-正式发布可在 GitHub 草稿页面操作，也可使用 `.github/workflows/publish-release.yml`：确认版本、说明与四个安装包后，在 `.github/release-publish.json` 指定版本、已测试的标签提交、成功的 CI 和打包运行 ID，推送到 main 会触发发布检查。也可在 main 上手动运行该工作流。这个文件代表明确的正式发布请求，应在确认发布时才更新。
+正式发布可在 GitHub 草稿页面操作，也可使用 `.github/workflows/publish-release.yml`：确认版本、说明与四个安装包后，在 `.github/release-publish.json` 指定版本、已测试的标签提交、成功的 CI / 打包运行 ID 与现有草稿的 Release ID，推送到 main 会触发发布检查。也可在 main 上手动运行该工作流；需要通过推送重试时可增加 `attempt`。这个文件代表明确的正式发布请求，应在确认发布时才更新。
 
 发布工作流只将已有草稿转为正式 Release，不重新打包、不移动标签、不替换附件；检查标签提交、对应 CI / 打包成功记录、四个附件完整性和最终说明。标签到当前文档提交之间仅允许 README、docs 和 .github 变动，应用文件变化会阻止发布。已发布版本再次运行时，只允许同样的说明与附件状态，不覆盖不同内容。
+
+GitHub 草稿可能显示 `untagged-*` 关联标签。发布流程仅允许按明确指定的 Release ID 找到名称完全一致的草稿，在核对现有 Git 标签与安装包后，将草稿关联回版本标签；不更改 Git 标签指向。
 
 发布前同步 `package.json`、`src-tauri/Cargo.toml`、`src-tauri/Cargo.lock` 与 `src-tauri/tauri.conf.json` 的版本，在 `docs/releases/v版本号.md` 写发布说明，然后运行 `node scripts/check-release.mjs`。先推送普通提交并等待该提交在 main 的 CI 全部通过，再推送对应的版本标签；Release 会检查标签与版本一致、该提交的 CI 已成功，以及对应 Release 尚未正式发布。
 
