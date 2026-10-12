@@ -1,0 +1,50 @@
+name: Bug 反馈
+description: 反馈 Windows 或 Mac 使用中遇到的问题。
+title: "[Bug] "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        感谢反馈！请提供可以复现问题的信息。提交截图、日志或 CLI 排查说明前，请移除 API Key、私人聊天和个人路径。
+  - type: input
+    id: system
+    attributes:
+      label: 系统版本与设备架构
+      placeholder: "例如：macOS 15 / Apple M3，或 Windows 11 / x64"
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: VibeKarma 版本
+      placeholder: "例如：0.2.0"
+    validations:
+      required: true
+  - type: input
+    id: cli
+    attributes:
+      label: Codex CLI 版本与安装方式
+      placeholder: "例如：版本号 / Homebrew、npm、独立安装或桌面客户端内置"
+  - type: textarea
+    id: steps
+    attributes:
+      label: 复现步骤
+      description: 从启动应用到出现问题，具体做了哪些操作？
+    validations:
+      required: true
+  - type: textarea
+    id: result
+    attributes:
+      label: 预期结果与实际结果
+    validations:
+      required: true
+  - type: textarea
+    id: mac
+    attributes:
+      label: Mac 授权与显示器情况（Mac 问题请填写）
+      description: 是否允许 VibeKarma 使用辅助功能？是否有外接屏，使用何种缩放和排列？
+  - type: textarea
+    id: details
+    attributes:
+      label: 错误摘要、截图或其他信息
+      description: 更新失败时可附弹窗中的错误摘要；请先检查并移除敏感信息。

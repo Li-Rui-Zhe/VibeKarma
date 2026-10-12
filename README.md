@@ -15,6 +15,8 @@
 
 [下载](#下载安装) · [演示](#动态演示) · [上手](#快速开始) · [FAQ](#常见问题) · [开发](docs/DEVELOPMENT.md)
 
+**当前版本：[v0.2.0](https://github.com/Li-Rui-Zhe/VibeKarma/releases/tag/v0.2.0)** · CLI 更新与失败重试 · Mac 聊天读取与授权提示
+
 </div>
 
 <img src="docs/media/divider.svg" alt="" width="100%" />
@@ -80,18 +82,27 @@
 
 ## 下载安装
 
-**[→ 前往 GitHub Releases 下载](https://github.com/Li-Rui-Zhe/VibeKarma/releases)**
+**[→ 下载 v0.2.0](https://github.com/Li-Rui-Zhe/VibeKarma/releases/tag/v0.2.0)** · [查看版本说明](docs/releases/v0.2.0.md)
 
 打开对应版本，展开页面下方的 **Assets**，选择与你的设备匹配的安装包：
 
 | 设备 | 安装包 | 说明 |
 | :--- | :--- | :--- |
-| Windows x64 | `VibeKarma_*_x64-setup.exe` | 常规安装，优先选这个。 |
-| Windows x64 | `VibeKarma_*_x64_en-US.msi` | 适用于 MSI 安装或企业部署。 |
-| Mac · Apple Silicon | `VibeKarma_*_aarch64.dmg` | M 系列芯片。 |
-| Mac · Intel | `VibeKarma_*_x64.dmg` | Intel 芯片。 |
+| Windows x64 | `VibeKarma_0.2.0_x64-setup.exe` | 常规安装，优先选这个。 |
+| Windows x64 | `VibeKarma_0.2.0_x64_en-US.msi` | 适用于 MSI 安装或企业部署。 |
+| Mac · Apple Silicon | `VibeKarma_0.2.0_aarch64.dmg` | M 系列芯片。 |
+| Mac · Intel | `VibeKarma_0.2.0_x64.dmg` | Intel 芯片。 |
 
 安装包目前尚未签名，Windows SmartScreen 或 macOS Gatekeeper 可能显示提醒。各下载版本的功能请以对应 Release 说明为准。
+
+### 🍎 Mac 安装与注意事项
+
+1. 在“关于本机”查看芯片，选择对应的 DMG，将 **VibeKarma.app** 拖入“应用程序”，再从“应用程序”启动。
+2. 首次打开若提示开发者无法验证，确认来自本仓库后，按 [Apple 官方说明](https://support.apple.com/zh-cn/102445) 在“系统设置 → 隐私与安全性”中选择“仍要打开”。
+3. 读取聊天需要在“系统设置 → 隐私与安全性 → 辅助功能”中允许 **VibeKarma**。应用设置中也有入口；授权后重新检测，若权限未生效，退出应用后重开。更新安装后也可能需要重新授权。
+4. 保持 Codex 聊天窗口可见，并安装、登录外部 Codex CLI。未授权、聊天读取失败或超时时会显示原因，仍可奖惩，日记改用填写原因和近期日记。
+
+Intel 与 Apple Silicon 的原生测试、完整构建、基础启动和 DMG 打包已通过 Actions。实际聊天、人工授权、Finder 首次打开与多显示器互动仍需真机验证，详细范围见 [Mac 使用说明](docs/MACOS.md) 和 [验证记录](docs/MACOS_VERIFICATION.md)。
 
 ## 快速开始
 
@@ -166,7 +177,7 @@ VibeKarma 优先使用外部独立安装的 CLI；没有可用外部 CLI 时，�
 
 支持 Intel 与 Apple Silicon Mac，使用原生窗口 API 识别和跟随桌面窗口。读取当前聊天内容需要在“系统设置 → 隐私与安全性 → 辅助功能”中允许 VibeKarma，应用设置中提供入口；未授权仍可奖惩和生成日记。
 
-CLI 更新代码适配了 Homebrew、npm 和官方独立安装方式。本次新增的聊天读取及更新流程仍待 Mac 原生运行验证，验证范围见 [Mac 验证说明](docs/MACOS_VERIFICATION.md)。
+CLI 更新代码适配了 Homebrew、npm 和官方独立安装方式；内置 CLI 随 Codex 桌面客户端更新。Intel 与 Apple Silicon 的 Actions 原生测试、构建、基础启动和 DMG 打包已通过；实际聊天、人工授权和更新交互仍需真机验证。安装与排查步骤见 [Mac 使用说明](docs/MACOS.md)。
 
 </details>
 
@@ -200,7 +211,9 @@ pnpm run tauri dev
 
 ## 一起把这个小玩具做得更好
 
-欢迎提交 [Issue](https://github.com/Li-Rui-Zhe/VibeKarma/issues) 或 Pull Request。反馈问题时，带上系统、应用版本、CLI 版本与复现步骤，会更容易定位。
+**遇到 Bug，欢迎 [提交 Issue](https://github.com/Li-Rui-Zhe/VibeKarma/issues/new?template=bug_report.yml)。** Windows、Mac 的问题都欢迎反馈，也欢迎提交 Pull Request。
+
+反馈时请附系统版本、设备架构、应用与 CLI 版本、复现步骤，以及预期和实际结果。Mac 问题请补充辅助功能授权状态、显示器情况；更新失败可附弹窗里的错误摘要，提交前检查并移除密钥、私人聊天和个人路径。
 
 如果 VibeKarma 让你和 Codex 的协作多了一点乐趣，欢迎给它一颗 ⭐。
 

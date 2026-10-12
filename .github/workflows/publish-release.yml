@@ -1,0 +1,76 @@
+name: Publish verified release
+
+on:
+  push:
+    branches: [main]
+    paths: [.github/release-publish.json]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: read
+
+concurrency:
+  group: publish-verified-release
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: node scripts/check-release.mjs
+      - name: Verify existing draft and publish
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('node:fs');
+            const { execFileSync } = require('node:child_process');
+            const request = JSON.parse(fs.readFileSync('.github/release-publish.json', 'utf8'));
+            const version = JSON.parse(fs.readFileSync('package.json', 'utf8')).version;
+            if (request.version !== version || !/^[0-9a-f]{40}$/.test(request.commit)) throw new Error('Publication request must match the application version and a full commit SHA.');
+            const tag = `v${version}`;
+            const { owner, repo } = context.repo;
+            const git = (...args) => execFileSync('git', args, { encoding: 'utf8' }).trim();
+            if (git('rev-parse', `${tag}^{}`) !== request.commit) throw new Error('The tested release tag has moved. Publication stopped.');
+            git('merge-base', '--is-ancestor', request.commit, 'HEAD');
+            const changes = git('diff', '--name-only', request.commit, 'HEAD').split('\n').filter(Boolean);
+            if (changes.some(file => file !== 'README.md' && !file.startsWith('docs/') && !file.startsWith('.github/'))) throw new Error('Application files changed after the tested tag. Build a new version before publishing.');
+            for (const [id, path, branch] of [
+              [request.ciRunId, '.github/workflows/ci.yml', 'main'],
+              [request.buildRunId, '.github/workflows/release.yml', tag],
+            ]) {
+              if (!Number.isSafeInteger(id) || id <= 0) throw new Error('Invalid verification run ID.');
+              const { data: run } = await github.rest.actions.getWorkflowRun({ owner, repo, run_id: id });
+              if (run.path !== path || run.head_branch !== branch || run.head_sha !== request.commit || run.event !== 'push' || run.conclusion !== 'success' || run.status !== 'completed') throw new Error(`Verification run ${id} does not match the tested release.`);
+            }
+            const releases = await github.paginate(github.rest.repos.listReleases, { owner, repo, per_page: 100 });
+            const release = releases.find(item => item.tag_name === tag);
+            if (!release) throw new Error('Existing draft was not found; no new release or assets will be created.');
+            const assets = await github.paginate(github.rest.repos.listReleaseAssets, { owner, repo, release_id: release.id, per_page: 100 });
+            const expected = [
+              `VibeKarma_${version}_x64-setup.exe`,
+              `VibeKarma_${version}_x64_en-US.msi`,
+              `VibeKarma_${version}_aarch64.dmg`,
+              `VibeKarma_${version}_x64.dmg`,
+            ];
+            if (assets.length !== expected.length || expected.some(name => assets.filter(asset => asset.name === name && asset.state === 'uploaded' && asset.size > 0).length !== 1)) throw new Error('All four verified installer assets must be present and fully uploaded.');
+            const body = fs.readFileSync(`docs/releases/${tag}.md`, 'utf8');
+            if (!body.trim() || body.includes('此 Release 保留为草稿')) throw new Error('Final release notes are missing or still describe a draft.');
+            if (!release.draft) {
+              if (release.body !== body || release.prerelease) throw new Error('A published release already exists with different details; it will not be overwritten.');
+              core.info(`Already published: ${release.html_url}`);
+              await core.summary.addLink('Published release', release.html_url).write();
+              return;
+            }
+            const { data: published } = await github.rest.repos.updateRelease({ owner, repo, release_id: release.id, name: `VibeKarma ${tag}`, body, draft: false, prerelease: false, make_latest: 'true' });
+            if (published.draft || published.prerelease || published.tag_name !== tag) throw new Error('GitHub did not return the expected published release.');
+            core.info(`Published: ${published.html_url}`);
+            await core.summary.addLink('Published release', published.html_url).write();

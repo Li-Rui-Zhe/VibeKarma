@@ -1,6 +1,8 @@
 # macOS 聊天读取与验证
 
-> 当前版本：v0.2.0。已接入 GitHub Actions 编译、原生测试和基础启动检查；具体通过情况以该提交的 Actions 结果为准。实际 Codex 会话与人工权限授权仍需真机验证。
+> 当前版本：v0.2.0。Intel 与 Apple Silicon 的 GitHub Actions 原生测试、完整编译、基础启动与 DMG 打包检查已通过。实际 Codex 会话与人工权限授权仍需真机验证。
+
+[Mac 安装与排查](MACOS.md) · [本版本 CI](https://github.com/Li-Rui-Zhe/VibeKarma/actions/runs/38194684854) · [本版本打包检查](https://github.com/Li-Rui-Zhe/VibeKarma/actions/runs/38195240433)
 
 ## 实现行为
 

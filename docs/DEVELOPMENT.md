@@ -116,6 +116,10 @@ macOS 读取聊天内容需要辅助功能授权；未授权或读取失败不�
 
 `.github/workflows/release.yml` 在推送 `v*` 标签时构建 Windows x64 NSIS/MSI、macOS Intel DMG 和 Apple Silicon DMG，生成草稿 Release。检查安装包及说明后，再发布草稿。
 
+正式发布可在 GitHub 草稿页面操作，也可使用 `.github/workflows/publish-release.yml`：确认版本、说明与四个安装包后，在 `.github/release-publish.json` 指定版本、已测试的标签提交、成功的 CI 和打包运行 ID，推送到 main 会触发发布检查。也可在 main 上手动运行该工作流。这个文件代表明确的正式发布请求，应在确认发布时才更新。
+
+发布工作流只将已有草稿转为正式 Release，不重新打包、不移动标签、不替换附件；检查标签提交、对应 CI / 打包成功记录、四个附件完整性和最终说明。标签到当前文档提交之间仅允许 README、docs 和 .github 变动，应用文件变化会阻止发布。已发布版本再次运行时，只允许同样的说明与附件状态，不覆盖不同内容。
+
 发布前同步 `package.json`、`src-tauri/Cargo.toml`、`src-tauri/Cargo.lock` 与 `src-tauri/tauri.conf.json` 的版本，在 `docs/releases/v版本号.md` 写发布说明，然后运行 `node scripts/check-release.mjs`。先推送普通提交并等待该提交在 main 的 CI 全部通过，再推送对应的版本标签；Release 会检查标签与版本一致、该提交的 CI 已成功，以及对应 Release 尚未正式发布。
 
 CI 在 Windows、Mac Intel 与 Apple Silicon 上构建原生应用，并检查进程存活和隔离目录中的 SQLite 初始化。Release 另外核对四种安装包的版本与架构，上传草稿附件与 Actions 测试报告。Mac 的基础启动检查在 DMG 打包前执行，因为 Tauri 只生成 DMG 时会清理中间 `.app`；Windows 在安装包生成后检查原生程序启动。这些检查不代替安装程序交互、实际 Codex 会话和人工权限授权测试。
@@ -126,6 +130,7 @@ CI 在 Windows、Mac Intel 与 Apple Silicon 上构建原生应用，并检查�
 
 - [首页与功能演示](../README.md)
 - [展示素材说明](media/README.md)
+- [Mac 安装与注意事项](MACOS.md)
 - [安全说明](../SECURITY.md)
 - [Apache License 2.0](../LICENSE)
 - [署名与资源许可](../NOTICE)
