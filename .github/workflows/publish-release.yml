@@ -53,7 +53,7 @@ jobs:
             }
             const releases = await github.paginate(github.rest.repos.listReleases, { owner, repo, per_page: 100 });
             const release = releases.find(item => item.tag_name === tag);
-            if (!release) throw new Error('Existing draft was not found; no new release or assets will be created.');
+            if (!release) throw new Error(`Existing draft was not found; no release or assets were changed. Visible release metadata: ${JSON.stringify(releases.map(item => ({ id: item.id, tag: item.tag_name, name: item.name, draft: item.draft })))}`);
             const assets = await github.paginate(github.rest.repos.listReleaseAssets, { owner, repo, release_id: release.id, per_page: 100 });
             const expected = [
               `VibeKarma_${version}_x64-setup.exe`,
