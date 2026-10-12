@@ -42,9 +42,11 @@ jobs:
             const releases = await github.paginate(github.rest.repos.listReleases, { owner, repo, per_page: 100 });
             let release = releases.find(item => item.tag_name === tag);
             if (release && !release.draft) throw new Error('This tag already has a published release; published assets will not be replaced.');
+            const body = fs.readFileSync(`docs/releases/${tag}.md`, 'utf8');
             if (!release) {
-              const body = fs.readFileSync(`docs/releases/${tag}.md`, 'utf8');
               release = (await github.rest.repos.createRelease({ owner, repo, tag_name: tag, target_commitish: sha, name: `VibeKarma ${tag}`, body, draft: true, prerelease: false })).data;
+            } else {
+              release = (await github.rest.repos.updateRelease({ owner, repo, release_id: release.id, target_commitish: sha, name: `VibeKarma ${tag}`, body, draft: true })).data;
             }
             core.setOutput('release_id', String(release.id));
             core.setOutput('release_url', release.html_url);
@@ -88,6 +90,12 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: node scripts/check-release.mjs
 
+      - name: Check macOS application before DMG packaging
+        if: startsWith(matrix.platform, 'macos-')
+        run: |
+          pnpm tauri build --ci --bundles app -- --locked
+          node scripts/smoke-native.mjs
+
       - uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -101,6 +109,7 @@ jobs:
       - name: Verify installer names and versions
         run: node scripts/check-bundles.mjs
       - name: Check packaged native startup
+        if: matrix.platform == 'windows-latest'
         run: node scripts/smoke-native.mjs
       - name: Upload tested installers
         uses: actions/upload-artifact@v4

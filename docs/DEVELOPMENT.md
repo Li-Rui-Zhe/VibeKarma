@@ -118,7 +118,7 @@ macOS 读取聊天内容需要辅助功能授权；未授权或读取失败不�
 
 发布前同步 `package.json`、`src-tauri/Cargo.toml`、`src-tauri/Cargo.lock` 与 `src-tauri/tauri.conf.json` 的版本，在 `docs/releases/v版本号.md` 写发布说明，然后运行 `node scripts/check-release.mjs`。先推送普通提交并等待该提交在 main 的 CI 全部通过，再推送对应的版本标签；Release 会检查标签与版本一致、该提交的 CI 已成功，以及对应 Release 尚未正式发布。
 
-CI 在 Windows、Mac Intel 与 Apple Silicon 上构建原生应用，并检查进程存活和隔离目录中的 SQLite 初始化。Release 另外核对四种安装包的版本、架构和基础启动，上传草稿附件与 Actions 测试报告。这些检查不代替实际 Codex 会话和人工权限授权测试。
+CI 在 Windows、Mac Intel 与 Apple Silicon 上构建原生应用，并检查进程存活和隔离目录中的 SQLite 初始化。Release 另外核对四种安装包的版本与架构，上传草稿附件与 Actions 测试报告。Mac 的基础启动检查在 DMG 打包前执行，因为 Tauri 只生成 DMG 时会清理中间 `.app`；Windows 在安装包生成后检查原生程序启动。这些检查不代替安装程序交互、实际 Codex 会话和人工权限授权测试。
 
 安装包当前没有代码签名。签名证书与认证信息使用发布平台的加密秘密存储，不提交到源码仓库。
 

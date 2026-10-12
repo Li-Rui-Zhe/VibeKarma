@@ -27,7 +27,7 @@ API 行为依据：[Apple AX 通信超时](https://developer.apple.com/documenta
 
 ## 后续 Mac 环境验证
 
-Actions 矩阵包含 Intel 和 Apple Silicon Mac。main 的 CI 先完成原生测试、完整应用编译与框架链接，再直接启动生成的 `.app` 可执行文件，在隔离数据目录中检查进程存活 12 秒和 SQLite 初始化。Release 要求相同提交的 CI 已通过，再生成 DMG，并核对安装包版本及架构，重复基础启动检查；Release 保留为草稿。
+Actions 矩阵包含 Intel 和 Apple Silicon Mac。main 的 CI 先完成原生测试、完整应用编译与框架链接，再直接启动生成的 `.app` 可执行文件，在隔离数据目录中检查进程存活 12 秒和 SQLite 初始化。Release 要求相同提交的 CI 已通过，在 DMG 打包前重复 `.app` 基础启动检查，然后生成 DMG 并核对安装包版本及架构；Release 保留为草稿。Tauri 只生成 DMG 时会清理中间 `.app`，因此不能在打包后用其旧路径检查启动。
 
 基础启动检查不安装 / 挂载 DMG，也不模拟 Finder 首次打开、Gatekeeper 放行、辅助功能人工授权或实际 Codex 聊天。因此不能据此声称这些交互已验证。
 
