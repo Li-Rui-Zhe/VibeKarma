@@ -4,9 +4,12 @@ import type {
   AppSettings,
   AppSnapshot,
   CodexCliInfo,
+  CodexCliUpdateInfo,
+  CodexCliUpdateResult,
   CodexLogEvent,
   CodexWindowInfo,
   DiaryEntry,
+  DiaryGenerationFailure,
   FeedbackReceipt,
   FeedbackRequest,
   FeedbackKind,
@@ -58,6 +61,7 @@ const demoSnapshot: AppSnapshot = {
   },
   diaries: demoDiaries,
   dataDir: "D:\\VibeKarmaData",
+  failedDiaryCount: 0,
 };
 
 async function call<T>(command: string, args?: Record<string, unknown>): Promise<T> {
@@ -80,6 +84,8 @@ export const backend = {
           available: true,
           source: "externalCli",
           path: IS_DEMO_MACOS ? "/opt/homebrew/bin/codex" : "C:\\Users\\demo\\AppData\\Roaming\\npm\\codex.cmd",
+          version: null,
+          updateHelp: null,
           message: "正在使用：外部 Codex CLI（推荐）",
         };
   },
@@ -109,6 +115,10 @@ export const backend = {
       : this.inspectCodexWindow();
   },
 
+  async openCodexContextPermissions(): Promise<void> {
+    if (isTauriRuntime()) await call<void>("open_codex_context_permissions");
+  },
+
   async recordDesktopFeedback(feedback: FeedbackRequest): Promise<FeedbackReceipt> {
     return isTauriRuntime()
       ? call<FeedbackReceipt>("record_desktop_feedback", { feedback })
@@ -122,6 +132,21 @@ export const backend = {
 
   async setWindowMode(mode: "compact" | "diary"): Promise<void> {
     if (isTauriRuntime()) await call<void>("set_main_window_mode", { mode });
+  },
+
+  async retryFailedDiaries(): Promise<number> {
+    return isTauriRuntime() ? call<number>("retry_failed_diaries") : 0;
+  },
+
+  async checkCodexCliUpdate(force = false): Promise<CodexCliUpdateInfo> {
+    return isTauriRuntime() ? call<CodexCliUpdateInfo>("check_codex_cli_update", { force }) : {
+      path: null, currentVersion: null, latestVersion: null,
+      status: "upToDate", canUpdate: false, method: null, message: "浏览器预览不检查本机 CLI 更新。",
+    };
+  },
+
+  async updateCodexCli(path: string, version: string): Promise<CodexCliUpdateResult> {
+    return call<CodexCliUpdateResult>("update_codex_cli", { path, version });
   },
 
 };
@@ -143,12 +168,14 @@ export async function subscribeOverlayCancel(handler: () => void): Promise<Unlis
 export async function subscribeBackendEvents(handlers: {
   onDiary: (payload: DiaryEntry) => void;
   onDiaryStart: (kind: string) => void;
+  onDiaryFailed: (payload: DiaryGenerationFailure) => void;
   onLog: (payload: CodexLogEvent) => void;
 }): Promise<UnlistenFn> {
   if (!isTauriRuntime()) return () => undefined;
   const unlisteners = await Promise.all([
     listen<DiaryEntry>("diary-created", (event) => handlers.onDiary(event.payload)),
     listen<string>("diary-generation-started", (event) => handlers.onDiaryStart(event.payload)),
+    listen<DiaryGenerationFailure>("diary-generation-failed", (event) => handlers.onDiaryFailed(event.payload)),
     listen<CodexLogEvent>("codex-log", (event) => handlers.onLog(event.payload)),
   ]);
   return () => unlisteners.forEach((unlisten) => unlisten());

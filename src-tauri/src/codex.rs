@@ -1,18 +1,31 @@
-use std::{process::Stdio, sync::Arc, time::Duration};
+use std::{
+    process::Stdio,
+    sync::{Arc, Mutex},
+    time::Duration,
+};
 
 use chrono::{Local, SecondsFormat};
 use serde_json::{json, Value};
 use tauri::{AppHandle, Emitter};
-use tokio::{io::AsyncWriteExt, sync::Semaphore, time::timeout};
+use tokio::{
+    io::AsyncWriteExt,
+    sync::{RwLock, Semaphore},
+    time::timeout,
+};
 
 use crate::{
-    models::{AppSettings, AppSnapshot, CodexCliInfo, CodexLogEvent, DiaryDraft, FeedbackRequest},
+    models::{
+        AppSettings, AppSnapshot, CodexCliInfo, CodexCliUpdateInfo, CodexCliUpdateResult,
+        CodexLogEvent, DiaryDraft, DiaryGenerationFailure, FeedbackRequest,
+    },
     storage::Storage,
 };
 
+mod diagnostics;
 #[cfg(any(target_os = "macos", test))]
 mod macos;
 mod resolver;
+mod updater;
 #[cfg(target_os = "windows")]
 mod windows;
 
@@ -66,6 +79,31 @@ pub struct CodexManager {
     app: AppHandle,
     storage: Arc<Storage>,
     reflection_slots: Arc<Semaphore>,
+    failed_reflections: FailedReflections,
+    cli_updater: updater::CliUpdater,
+    cli_access: RwLock<()>,
+}
+
+#[derive(Default)]
+struct FailedReflections(Mutex<Vec<ReflectionJob>>);
+
+impl FailedReflections {
+    fn push(&self, job: ReflectionJob) -> usize {
+        let mut jobs = self.0.lock().unwrap_or_else(|error| error.into_inner());
+        jobs.push(job);
+        jobs.len()
+    }
+
+    fn count(&self) -> usize {
+        self.0
+            .lock()
+            .unwrap_or_else(|error| error.into_inner())
+            .len()
+    }
+
+    fn take(&self) -> Vec<ReflectionJob> {
+        std::mem::take(&mut *self.0.lock().unwrap_or_else(|error| error.into_inner()))
+    }
 }
 
 impl CodexManager {
@@ -74,6 +112,9 @@ impl CodexManager {
             app,
             storage,
             reflection_slots: Arc::new(Semaphore::new(2)),
+            failed_reflections: FailedReflections::default(),
+            cli_updater: updater::CliUpdater::default(),
+            cli_access: RwLock::new(()),
         }
     }
 
@@ -82,10 +123,12 @@ impl CodexManager {
             settings: self.storage.load_settings(),
             diaries: self.storage.list_diaries(),
             data_dir: self.storage.root().to_string_lossy().into_owned(),
+            failed_diary_count: self.failed_reflections.count(),
         }
     }
 
     pub async fn save_settings(&self, settings: AppSettings) -> Result<AppSettings, String> {
+        let _access = self.cli_access.read().await;
         validate_settings(&settings)?;
         if settings
             .codex_path
@@ -102,7 +145,38 @@ impl CodexManager {
     }
 
     pub async fn codex_cli_info(&self) -> CodexCliInfo {
+        let _access = self.cli_access.read().await;
         resolver::inspect(&self.storage.load_settings()).await
+    }
+
+    pub async fn check_cli_update(&self, force: bool) -> CodexCliUpdateInfo {
+        let _access = self.cli_access.read().await;
+        self.cli_updater
+            .check(&self.storage.load_settings(), force)
+            .await
+    }
+
+    pub async fn update_cli(
+        self: &Arc<Self>,
+        path: &str,
+        version: &str,
+    ) -> Result<CodexCliUpdateResult, String> {
+        let access = self
+            .cli_access
+            .try_write()
+            .map_err(|_| "正在检测 CLI 或生成日记，请等待完成后再更新。".to_owned())?;
+        let cli = self
+            .cli_updater
+            .apply(
+                &self.storage.load_settings(),
+                path,
+                version,
+                &self.storage.root().join("cli-update-cache"),
+            )
+            .await?;
+        drop(access);
+        let retried_count = self.retry_failed_reflections();
+        Ok(CodexCliUpdateResult { cli, retried_count })
     }
 
     pub fn list_diaries(&self) -> Vec<crate::models::DiaryEntry> {
@@ -127,7 +201,11 @@ impl CodexManager {
             .join("\n");
         let context = format!(
             "[当前窗口近期内容]\n{}\n\n[最近三篇日记，仅用于避免重复措辞和保持关系连续性]\n{}",
-            truncate(&context, 14_000),
+            if context.trim().is_empty() {
+                "本次未能读取当前聊天内容。仅根据奖惩种类、用户填写的原因和近期日记创作，不要臆测具体工作错误或成果。".to_owned()
+            } else {
+                truncate(&context, 14_000)
+            },
             if recent_diaries.is_empty() {
                 "暂无"
             } else {
@@ -152,6 +230,20 @@ impl CodexManager {
             "diary_intensity": job.intensity.label(),
         }))?;
 
+        self.spawn_reflection(job);
+        Ok(())
+    }
+
+    pub fn retry_failed_reflections(self: &Arc<Self>) -> usize {
+        let jobs = self.failed_reflections.take();
+        let count = jobs.len();
+        for job in jobs {
+            self.spawn_reflection(job);
+        }
+        count
+    }
+
+    fn spawn_reflection(self: &Arc<Self>, job: ReflectionJob) {
         let manager = self.clone();
         tokio::spawn(async move {
             let permit = match manager.reflection_slots.clone().acquire_owned().await {
@@ -163,21 +255,34 @@ impl CodexManager {
             };
             let _ = manager.app.emit("diary-generation-started", &job.kind);
             match manager.generate_desktop_reflection(&job).await {
-                Ok(diary) => manager.finish_desktop_reflection(job, diary),
+                Ok(diary) => {
+                    if let Err(error) = manager.finish_desktop_reflection(&job, diary) {
+                        manager.reflection_failed(job, error);
+                    }
+                }
                 Err(error) => {
-                    let message = format!("Codex 日记生成失败：{error}");
-                    let _ = manager.storage.append_event(&json!({
-                        "at": now_rfc3339(),
-                        "type": "diary_generation_failed",
-                        "kind": job.kind,
-                        "error": error,
-                    }));
-                    manager.emit_log("error", message);
+                    manager.reflection_failed(job, error);
                 }
             }
             drop(permit);
         });
-        Ok(())
+    }
+
+    fn reflection_failed(&self, job: ReflectionJob, error: String) {
+        let _ = self.storage.append_event(&json!({
+            "at": now_rfc3339(),
+            "type": "diary_generation_failed",
+            "kind": job.kind,
+            "error": error,
+        }));
+        let pending_count = self.failed_reflections.push(job);
+        let _ = self.app.emit(
+            "diary-generation-failed",
+            DiaryGenerationFailure {
+                message: error,
+                pending_count,
+            },
+        );
     }
 
     async fn generate_desktop_reflection(
@@ -191,8 +296,10 @@ impl CodexManager {
     }
 
     async fn run_codex_diary_prompt(&self, prompt: String) -> Result<String, String> {
+        let _access = self.cli_access.read().await;
         let settings = self.storage.load_settings();
-        let mut command = resolver::build_exec_command(&settings, self.storage.root()).await?;
+        let (mut command, resolved) =
+            resolver::build_exec_command(&settings, self.storage.root()).await?;
         command
             .current_dir(self.storage.root())
             .stdin(Stdio::piped())
@@ -225,14 +332,17 @@ impl CodexManager {
 
         let output = timeout(REFLECTION_TIMEOUT, child.wait_with_output())
             .await
-            .map_err(|_| "生成超时".to_owned())?
+            .map_err(|_| diagnostics::timeout_failure(&resolved))?
             .map_err(|error| format!("Codex 日记线程异常结束：{error}"))?;
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
-            return Err(resolver::with_install_help(format!(
-                "Codex CLI 返回失败：{}",
-                truncate(stderr.trim(), 220)
-            )));
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            return Err(diagnostics::execution_failure(
+                &resolved,
+                &stderr,
+                &stdout,
+                &output.status.to_string(),
+            ));
         }
         let raw = String::from_utf8_lossy(&output.stdout).trim().to_owned();
         if raw.is_empty() {
@@ -241,23 +351,28 @@ impl CodexManager {
         Ok(raw)
     }
 
-    fn finish_desktop_reflection(&self, job: ReflectionJob, diary: (String, String)) {
+    fn finish_desktop_reflection(
+        &self,
+        job: &ReflectionJob,
+        diary: (String, String),
+    ) -> Result<(), String> {
         let (title, body) = diary;
         let draft = DiaryDraft {
-            created_at: job.created_at,
-            kind: job.kind,
+            created_at: job.created_at.clone(),
+            kind: job.kind.clone(),
             title,
             body,
-            reason: job.reason,
-            thread_id: job.main_thread_id,
-            turn_id: job.main_turn_id,
+            reason: job.reason.clone(),
+            thread_id: job.main_thread_id.clone(),
+            turn_id: job.main_turn_id.clone(),
             generated_by_codex: true,
         };
         match self.storage.write_diary(draft) {
             Ok(entry) => {
                 let _ = self.app.emit("diary-created", entry);
+                Ok(())
             }
-            Err(error) => self.emit_log("error", format!("保存 Codex 日记失败：{error}")),
+            Err(error) => Err(format!("保存 Codex 日记失败：{error}")),
         }
     }
 
@@ -305,7 +420,7 @@ fn diary_prompt(job: &ReflectionJob) -> String {
     let reason = job
         .reason
         .as_deref()
-        .unwrap_or("用户没有指定原因，请从当前窗口内容判断这次情绪的导火索");
+        .unwrap_or("用户没有指定原因，请根据可用的窗口内容判断情绪导火索；若未能读取窗口内容，不要臆测具体工作错误或成果");
     format!(
         r#"你是刚才参与工作的 Codex，也是 VibeKarma 日记里被高度拟人化的主角。现在是 {}，请为“{}”写一篇第一人称私人日记。
 
@@ -426,7 +541,7 @@ fn now_rfc3339() -> String {
 mod tests {
     use super::{
         diary_prompt, fit_diary_title, parse_diary_response, select_diary_intensity,
-        DiaryIntensity, ReflectionJob, DIARY_TITLE_MAX_CHARS,
+        DiaryIntensity, FailedReflections, ReflectionJob, DIARY_TITLE_MAX_CHARS,
     };
 
     fn job(kind: &str) -> ReflectionJob {
@@ -439,6 +554,25 @@ mod tests {
             main_thread_id: None,
             main_turn_id: None,
         }
+    }
+
+    #[test]
+    fn retry_queue_preserves_original_job_and_drains_only_once() {
+        let queue = std::sync::Arc::new(FailedReflections::default());
+        let mut original = job("奖励日记");
+        original.context = "原奖惩发生时的窗口内容".to_owned();
+        let expected_prompt = diary_prompt(&original);
+        assert_eq!(queue.push(original), 1);
+        let other = queue.clone();
+        let competing_retry = std::thread::spawn(move || other.take());
+        let mut retried = queue.take();
+        retried.extend(competing_retry.join().unwrap());
+        assert_eq!(retried.len(), 1);
+        assert_eq!(diary_prompt(&retried[0]), expected_prompt);
+        assert_eq!(retried[0].created_at, "2026-07-20T12:00:00+08:00");
+        assert_eq!(queue.count(), 0);
+        assert_eq!(queue.push(retried.remove(0)), 1);
+        assert_eq!(queue.take().len(), 1);
     }
 
     #[test]

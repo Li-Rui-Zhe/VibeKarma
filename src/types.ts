@@ -21,6 +21,7 @@ export interface AppSnapshot {
   settings: AppSettings;
   diaries: DiaryEntry[];
   dataDir: string;
+  failedDiaryCount: number;
 }
 
 export type FeedbackKind = "reward" | "correction";
@@ -34,7 +35,24 @@ export interface CodexCliInfo {
   available: boolean;
   source: "userConfigured" | "externalCli" | "desktopBundled" | null;
   path: string | null;
+  version: string | null;
+  updateHelp: string | null;
   message: string;
+}
+
+export interface CodexCliUpdateInfo {
+  path: string | null;
+  currentVersion: string | null;
+  latestVersion: string | null;
+  status: "unavailable" | "checkFailed" | "upToDate" | "available" | "unknownVersion";
+  canUpdate: boolean;
+  method: string | null;
+  message: string;
+}
+
+export interface CodexCliUpdateResult {
+  cli: CodexCliInfo;
+  retriedCount: number;
 }
 
 export interface FeedbackReceipt {
@@ -42,6 +60,7 @@ export interface FeedbackReceipt {
   threadId: string;
   turnId: string | null;
   diaryQueued: boolean;
+  contextWarning?: string | null;
 }
 
 export interface CodexWindowInfo {
@@ -56,6 +75,7 @@ export interface CodexWindowInfo {
   working: boolean;
   editorFound: boolean;
   editorHasDraft: boolean;
+  contextWarning?: string | null;
   error: string | null;
 }
 
@@ -68,4 +88,9 @@ export interface OverlayAction {
 export interface CodexLogEvent {
   level: string;
   message: string;
+}
+
+export interface DiaryGenerationFailure {
+  message: string;
+  pendingCount: number;
 }

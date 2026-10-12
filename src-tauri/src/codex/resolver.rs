@@ -34,7 +34,7 @@ impl CodexSource {
         }
     }
 
-    fn label(self) -> &'static str {
+    pub(super) fn label(self) -> &'static str {
         match self {
             Self::UserConfigured => "手动指定的 Codex CLI",
             Self::ExternalCli => "外部 Codex CLI（推荐）",
@@ -55,6 +55,7 @@ pub(super) struct ResolvedCodex {
     pub path: PathBuf,
     pub source: CodexSource,
     pub launch_kind: LaunchKind,
+    pub version: Option<String>,
 }
 
 const HEALTH_CHECK_TIMEOUT: Duration = Duration::from_secs(3);
@@ -63,15 +64,19 @@ const SUPPORT_PROMPT_MARKER: &str = "[VIBEKARMA_CODEX_SUPPORT_PROMPT]";
 pub(super) async fn inspect(settings: &AppSettings) -> CodexCliInfo {
     match resolve(settings).await {
         Ok(resolved) => CodexCliInfo {
+            update_help: Some(super::diagnostics::update_help(&resolved)),
             available: true,
             source: Some(resolved.source.value().to_owned()),
             path: Some(resolved.path.to_string_lossy().into_owned()),
+            version: resolved.version,
             message: format!("正在使用：{}", resolved.source.label()),
         },
         Err(message) => CodexCliInfo {
             available: false,
             source: None,
             path: None,
+            version: None,
+            update_help: None,
             message,
         },
     }
@@ -80,7 +85,7 @@ pub(super) async fn inspect(settings: &AppSettings) -> CodexCliInfo {
 pub(super) async fn build_exec_command(
     settings: &AppSettings,
     workspace: &Path,
-) -> Result<Command, String> {
+) -> Result<(Command, ResolvedCodex), String> {
     let resolved = resolve(settings).await?;
     let args = [
         OsString::from("exec"),
@@ -96,17 +101,23 @@ pub(super) async fn build_exec_command(
         OsString::from("-"),
     ];
 
-    #[cfg(target_os = "windows")]
-    let mut command = platform::build_command(&resolved, &args)?;
+    let command = build_program_command(&resolved.path, &args)?;
+    Ok((command, resolved))
+}
 
+pub(super) fn build_program_command(path: &Path, args: &[OsString]) -> Result<Command, String> {
+    #[cfg(target_os = "windows")]
+    let mut command = platform::build_command(
+        &resolved(path.to_path_buf(), CodexSource::ExternalCli),
+        args,
+    )?;
     #[cfg(not(target_os = "windows"))]
     let mut command = {
-        let mut command = Command::new(&resolved.path);
-        command.args(&args);
+        let mut command = Command::new(path);
+        command.args(args);
         command
     };
-
-    prepend_executable_dir_to_path(&mut command, &resolved.path);
+    prepend_executable_dir_to_path(&mut command, path);
     Ok(command)
 }
 
@@ -144,7 +155,7 @@ fn format_install_help(summary: &str, platform: &str, install_instruction: &str)
     )
 }
 
-async fn resolve(settings: &AppSettings) -> Result<ResolvedCodex, String> {
+pub(super) async fn resolve(settings: &AppSettings) -> Result<ResolvedCodex, String> {
     let configured = settings
         .codex_path
         .as_deref()
@@ -252,16 +263,19 @@ async fn first_healthy(
         if !is_usable_cli(&path) {
             continue;
         }
-        let candidate = resolved(path, source);
+        let mut candidate = resolved(path, source);
         match health_check(&candidate).await {
-            Ok(()) => return Some(candidate),
+            Ok(version) => {
+                candidate.version = version;
+                return Some(candidate);
+            }
             Err(error) => failures.push(format!("{}：{error}", candidate.path.display())),
         }
     }
     None
 }
 
-async fn health_check(resolved: &ResolvedCodex) -> Result<(), String> {
+async fn health_check(resolved: &ResolvedCodex) -> Result<Option<String>, String> {
     let args = [OsString::from("--version")];
 
     #[cfg(target_os = "windows")]
@@ -277,7 +291,7 @@ async fn health_check(resolved: &ResolvedCodex) -> Result<(), String> {
     prepend_executable_dir_to_path(&mut command, &resolved.path);
     command
         .stdin(Stdio::null())
-        .stdout(Stdio::null())
+        .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .kill_on_drop(true);
     let child = command
@@ -288,7 +302,9 @@ async fn health_check(resolved: &ResolvedCodex) -> Result<(), String> {
         .map_err(|_| "健康检查超时".to_owned())?
         .map_err(|error| format!("健康检查异常结束：{error}"))?;
     if output.status.success() {
-        return Ok(());
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return Ok(parse_version(&stdout).or_else(|| parse_version(&stderr)));
     }
     let stderr = String::from_utf8_lossy(&output.stderr);
     let detail = stderr.trim();
@@ -297,6 +313,17 @@ async fn health_check(resolved: &ResolvedCodex) -> Result<(), String> {
     } else {
         Err(format!("健康检查失败：{}", truncate(detail, 180)))
     }
+}
+
+fn parse_version(output: &str) -> Option<String> {
+    output.lines().find_map(|line| {
+        let line = line.trim();
+        let value = line
+            .strip_prefix("codex-cli ")
+            .or_else(|| line.strip_prefix("OpenAI Codex v"))?
+            .trim();
+        (!value.is_empty()).then(|| truncate(value, 80))
+    })
 }
 
 fn truncate(value: &str, max_chars: usize) -> String {
@@ -310,6 +337,7 @@ fn truncate(value: &str, max_chars: usize) -> String {
 
 fn resolved(path: PathBuf, source: CodexSource) -> ResolvedCodex {
     ResolvedCodex {
+        version: None,
         launch_kind: launch_kind(&path),
         path,
         source,
@@ -448,7 +476,8 @@ mod tests {
 
     use super::{
         configured_candidates, deduplicate, first_healthy, first_usable, format_install_help,
-        with_install_help, without_desktop_candidates, CodexSource, SUPPORT_PROMPT_MARKER,
+        inspect, parse_version, with_install_help, without_desktop_candidates, CodexSource,
+        SUPPORT_PROMPT_MARKER,
     };
 
     #[test]
@@ -502,6 +531,50 @@ mod tests {
         assert!(message.contains("找不到 Codex CLI"));
         assert!(!message.contains("完成登录"));
         assert!(!message.contains("诊断信息"));
+    }
+
+    #[test]
+    fn cli_version_handles_banners_and_warnings() {
+        assert_eq!(
+            parse_version("warning: something\ncodex-cli 0.157.1\n"),
+            Some("0.157.1".into())
+        );
+        assert_eq!(
+            parse_version("OpenAI Codex v0.160.0"),
+            Some("0.160.0".into())
+        );
+        assert_eq!(parse_version("unexpected output"), None);
+    }
+
+    #[tokio::test]
+    async fn reinspection_reads_updated_version_at_the_configured_path() {
+        let root = std::env::temp_dir().join(format!("vibekarma-version-{}", std::process::id()));
+        fs::create_dir_all(&root).unwrap();
+        let path = root.join(test_executable_name("codex"));
+        let settings = crate::models::AppSettings {
+            codex_path: Some(path.to_string_lossy().into_owned()),
+            ..Default::default()
+        };
+        for version in ["0.157.1", "0.160.0"] {
+            #[cfg(windows)]
+            fs::write(
+                &path,
+                format!("@echo off\r\necho codex-cli {version}\r\nexit /b 0\r\n"),
+            )
+            .unwrap();
+            #[cfg(not(windows))]
+            {
+                use std::os::unix::fs::PermissionsExt;
+                fs::write(&path, format!("#!/bin/sh\necho codex-cli {version}\n")).unwrap();
+                fs::set_permissions(&path, fs::Permissions::from_mode(0o755)).unwrap();
+            }
+            let info = inspect(&settings).await;
+            assert!(info.available, "{}", info.message);
+            assert_eq!(info.version.as_deref(), Some(version));
+            assert_eq!(info.source.as_deref(), Some("userConfigured"));
+            assert!(info.update_help.unwrap().contains(version));
+        }
+        let _ = fs::remove_dir_all(root);
     }
 
     #[test]

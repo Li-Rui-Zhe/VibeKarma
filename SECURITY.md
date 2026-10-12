@@ -13,13 +13,14 @@ Please report vulnerabilities privately to the repository owner before opening a
 - VibeKarma prefers a separately installed Codex CLI. A CLI found inside the Codex desktop application is a best-effort fallback only; no Codex binary is copied, bundled, or redistributed.
 - The current reward and punishment flow does not inject text into, interrupt, or modify the active Codex task.
 - The transparent interaction layer is positioned only after a visible Codex desktop window has been identified.
-- Diary generation runs in an ephemeral Codex CLI process with a `read-only` sandbox and `never` approval policy.
+- Diary generation runs through non-interactive Codex CLI execution in an ephemeral session with a `read-only` sandbox.
 - The diary process runs from the VibeKarma data directory rather than the user's project workspace.
-- Window context, feedback events, settings, and generated diaries remain local unless the user exports or publishes them.
+- Settings, feedback events, and generated diaries are stored locally. During diary generation, the required window context, feedback reason, and recent diary excerpts are provided to the user's configured Codex CLI / Provider, which may process them remotely. VibeKarma does not upload these materials to a separate VibeKarma service.
+- On macOS, reading window text requires Accessibility permission. Missing permission or a failed read is reported and falls back to the feedback reason and recent diaries. The reader skips draft input fields and secure fields, matches the selected window, and limits traversal and communication time.
 
 ## Local data
 
-VibeKarma stores settings, JSONL event logs, and a SQLite diary database. On machines with a D drive the default location is `D:\VibeKarmaData`; otherwise the application data directory is used. `VIBEKARMA_DATA_DIR` can override this location.
+VibeKarma stores settings, JSONL event logs, and a SQLite diary database. On Windows machines with a D drive the default location is `D:\VibeKarmaData`; otherwise the application data directory is used. macOS uses its application data directory. `VIBEKARMA_DATA_DIR` can override this location.
 
 Local databases, logs, environment files, temporary browser profiles, generated previews, SSH keys, signing credentials, and API keys must not be committed to the repository.
 

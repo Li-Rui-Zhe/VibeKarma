@@ -7,23 +7,66 @@ on:
 
 permissions:
   contents: write
+  actions: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      release_id: ${{ steps.draft.outputs.release_id }}
+      release_url: ${{ steps.draft.outputs.release_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: node scripts/check-release.mjs
+      - name: Require successful CI and prepare one draft
+        id: draft
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('node:fs');
+            const { execFileSync } = require('node:child_process');
+            const sha = execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim();
+            const tag = process.env.GITHUB_REF_NAME;
+            const { owner, repo } = context.repo;
+            const runs = await github.rest.actions.listWorkflowRuns({ owner, repo, workflow_id: 'ci.yml', head_sha: sha, event: 'push', per_page: 100 });
+            const verified = runs.data.workflow_runs.some(run => run.head_sha === sha && run.head_branch === 'main' && run.conclusion === 'success');
+            if (!verified) throw new Error('The tagged commit must first pass CI on main. No installer build has been started.');
+            const releases = await github.paginate(github.rest.repos.listReleases, { owner, repo, per_page: 100 });
+            let release = releases.find(item => item.tag_name === tag);
+            if (release && !release.draft) throw new Error('This tag already has a published release; published assets will not be replaced.');
+            if (!release) {
+              const body = fs.readFileSync(`docs/releases/${tag}.md`, 'utf8');
+              release = (await github.rest.repos.createRelease({ owner, repo, tag_name: tag, target_commitish: sha, name: `VibeKarma ${tag}`, body, draft: true, prerelease: false })).data;
+            }
+            core.setOutput('release_id', String(release.id));
+            core.setOutput('release_url', release.html_url);
+            core.info(`Draft release: ${release.html_url}`);
+            await core.summary.addLink('Review draft release', release.html_url).write();
   publish:
+    needs: prepare
     strategy:
       fail-fast: false
       matrix:
         include:
           - platform: windows-latest
             label: Windows x64
-            args: --bundles nsis,msi
+            args: --ci --bundles nsis,msi -- --locked
           - platform: macos-15-intel
             label: macOS Intel
-            args: --bundles dmg
+            args: --ci --bundles dmg -- --locked
           - platform: macos-15
             label: macOS Apple Silicon
-            args: --bundles dmg
+            args: --ci --bundles dmg -- --locked
     runs-on: ${{ matrix.platform }}
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
 
@@ -43,15 +86,41 @@ jobs:
           workspaces: src-tauri -> target
 
       - run: pnpm install --frozen-lockfile
+      - run: node scripts/check-release.mjs
 
       - uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
+          releaseId: ${{ needs.prepare.outputs.release_id }}
           tagName: ${{ github.ref_name }}
-          releaseName: "VibeKarma ${{ github.ref_name }}"
-          releaseBody: "VibeKarma desktop builds for Windows x64 and macOS (Intel and Apple Silicon). A separately installed Codex CLI is recommended; the desktop app's internal CLI is used only as a compatibility fallback."
           releaseDraft: true
           prerelease: false
+          includeUpdaterJson: false
           args: ${{ matrix.args }}
+      - name: Verify installer names and versions
+        run: node scripts/check-bundles.mjs
+      - name: Check packaged native startup
+        run: node scripts/smoke-native.mjs
+      - name: Upload tested installers
+        uses: actions/upload-artifact@v4
+        with:
+          name: installers-${{ matrix.platform }}
+          path: |
+            src-tauri/target/release/bundle/nsis/*-setup.exe
+            src-tauri/target/release/bundle/msi/*.msi
+            src-tauri/target/release/bundle/dmg/*.dmg
+          if-no-files-found: error
+          retention-days: 14
+      - name: Upload native startup report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-startup-${{ matrix.platform }}
+          path: |
+            .cache/native-smoke/report.json
+            .cache/native-smoke/startup.log
+          if-no-files-found: ignore
+          include-hidden-files: true
+          retention-days: 7
 

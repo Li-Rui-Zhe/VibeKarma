@@ -5,6 +5,13 @@ on:
     branches: [main]
   pull_request:
 
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   verify:
     strategy:
@@ -12,6 +19,7 @@ jobs:
       matrix:
         os: [windows-latest, macos-15, macos-15-intel, ubuntu-22.04]
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 40
     steps:
       - uses: actions/checkout@v4
 
@@ -37,6 +45,7 @@ jobs:
           sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
 
       - run: pnpm install --frozen-lockfile
+      - run: node scripts/check-release.mjs
       - run: pnpm test
       - run: pnpm build
       - run: cargo fmt --manifest-path src-tauri/Cargo.toml -- --check
@@ -44,7 +53,7 @@ jobs:
         shell: bash
         run: |
           set -o pipefail
-          cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings 2>&1 | tee clippy.log || {
+          cargo clippy --locked --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings 2>&1 | tee clippy.log || {
             message="$(tail -n 80 clippy.log)"
             message="${message//'%'/'%25'}"
             message="${message//$'\r'/'%0D'}"
@@ -52,8 +61,25 @@ jobs:
             echo "::error title=Rust Clippy failed::$message"
             exit 1
           }
-      - run: cargo test --manifest-path src-tauri/Cargo.toml
-      - name: Build macOS production bundles
+      - run: cargo test --locked --manifest-path src-tauri/Cargo.toml
+      - name: Build macOS production application
         if: startsWith(matrix.os, 'macos-')
-        run: pnpm tauri build
+        run: pnpm tauri build --ci --bundles app -- --locked
+      - name: Build Windows production application
+        if: matrix.os == 'windows-latest'
+        run: pnpm tauri build --ci --no-bundle -- --locked
+      - name: Check native startup
+        if: matrix.os == 'windows-latest' || startsWith(matrix.os, 'macos-')
+        run: node scripts/smoke-native.mjs
+      - name: Upload native startup report
+        if: always() && (matrix.os == 'windows-latest' || startsWith(matrix.os, 'macos-'))
+        uses: actions/upload-artifact@v4
+        with:
+          name: native-startup-${{ matrix.os }}
+          path: |
+            .cache/native-smoke/report.json
+            .cache/native-smoke/startup.log
+          if-no-files-found: ignore
+          include-hidden-files: true
+          retention-days: 7
 

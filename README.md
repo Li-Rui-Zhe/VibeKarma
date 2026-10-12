@@ -1,176 +1,217 @@
+<div align="center">
+
+<img src="docs/media/hero.png" alt="VibeKarma：干得好，画个饼；跑偏了，抽一下。Codex 桌面伴侣。" width="100%" />
+
 # VibeKarma
 
-VibeKarma 是一个用 Tauri 2、React 19 和 Rust 构建的 Codex 桌面伴侣。它覆盖在真实 Codex 桌面窗口上，把“惩罚一下”和“奖励一下”做成可操作的互动反馈，并让本机 Codex CLI 将这次反馈写成第一人称反省日记。
+**给你的 Codex 一点奖励，一点鞭策，再留下一本反省日记。**
 
-> 桌面窗口识别与互动覆盖层支持 Windows 和 macOS；两个系统使用各自的原生窗口 API，互不影响。
+<p>
+  <a href="https://github.com/Li-Rui-Zhe/VibeKarma/releases"><img src="https://img.shields.io/github/v/release/Li-Rui-Zhe/VibeKarma?style=flat-square&amp;label=release&amp;color=173d33" alt="GitHub Release" /></a>
+  <img src="https://img.shields.io/badge/desktop-Windows%20%7C%20macOS-173d33?style=flat-square" alt="Windows 与 macOS" />
+  <img src="https://img.shields.io/badge/built%20with-Tauri%202-b58a34?style=flat-square" alt="Built with Tauri 2" />
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache--2.0-b58a34?style=flat-square" alt="Apache License 2.0" /></a>
+</p>
 
-## 下载
+[下载](#下载安装) · [演示](#动态演示) · [上手](#快速开始) · [FAQ](#常见问题) · [开发](docs/DEVELOPMENT.md)
 
-前往 [GitHub Releases](https://github.com/Li-Rui-Zhe/VibeKarma/releases) 下载最新版本。
+</div>
 
-- Windows 普通用户：下载 `VibeKarma_*_x64-setup.exe`
-- Windows 企业部署：下载 `VibeKarma_*_x64_en-US.msi`
-- Apple Silicon Mac：下载 `VibeKarma_*_aarch64.dmg`
-- Intel Mac：下载 `VibeKarma_*_x64.dmg`
-（滑到最底下的Assets展开）
+<img src="docs/media/divider.svg" alt="" width="100%" />
 
-当前版本为预发布版本，安装包尚未进行代码签名。Windows SmartScreen 或 macOS Gatekeeper 可能显示安全提醒。推荐在本机独立安装并登录 Codex CLI；未找到外部 CLI 时，VibeKarma 会尝试使用 Codex 桌面客户端内部 CLI 作为备用。
+## 当它说“完成了”，你想给点反馈
 
-## 当前功能
+有时候，Codex 把问题修得干净利落，你想给它画个饼。
 
-### 惩罚一下
+有时候，你只让它改一行，它却顺手重写了半个项目，你想让它长点记性。
 
-- 自动识别当前可见的 Codex 桌面窗口，并在窗口范围内打开透明覆盖层。
-- 鞭子会跟随鼠标按物理链条摆动；高速甩动时产生抽击、声音、震动和鞭痕反馈。
-- 触发阈值经过降低，普通鼠标甩动也比较容易打出有效抽击。
-- 一次覆盖层内可以连续抽击，但最终只记录一次惩罚。
-- 单击放手并结束，`Esc` 或鼠标右键撤回本次惩罚。
+**VibeKarma 把这些时刻做成了一个桌面小玩具：** 在 Codex 窗口上甩一下鞭子，或亲手画一个真的会出现的饼，然后让本机 Codex CLI 把这次经历写成第一人称日记。
 
-### 奖励一下
+| 功能 | 你可以做什么 |
+| :--- | :--- |
+| 🪢 **鞭策一下** | 甩动物理鞭子，体验抽击、声音和鞭痕反馈。 |
+| 🥨 **奖励一下** | 亲手画出轮廓，松手以后，大饼现场兑现。 |
+| 📖 **反省日记** | 翻一翻它的第一人称日记，留住合作里的小故事。 |
+| 🔧 **CLI 管理** | 检查版本、一键更新，遇到问题可复制修复说明。 |
 
-- 按钮文案为“奖励一下 / 画个大饼，现场兑现”。
-- 悬停时，笔会沿着饼的轮廓完成绘制动效。
-- 进入覆盖层后按住鼠标画饼，松手时校验轨迹；有效轨迹会现场变成一张真正的大饼。
-- 轨迹太短或范围太小时不会提交，可以直接重画；`Esc` 或鼠标右键退出。
+## 动态演示
 
-### 反省日记
+<table>
+  <tr>
+    <td width="50%" align="center">
+      <h3>🪢 跑偏了，鞭策一下</h3>
+      <p>鼠标一甩，物理鞭子跟着动。</p>
+      <img src="docs/media/whip.gif" alt="鞭子随鼠标摆动，放手后落下的交互演示" width="100%" />
+    </td>
+    <td width="50%" align="center">
+      <h3>🥨 干得好，画个大饼</h3>
+      <p>承诺画在屏幕上，松手就兑现。</p>
+      <img src="docs/media/reward.gif" alt="按住鼠标画出椭圆轮廓，松手后出现大饼的交互演示" width="100%" />
+    </td>
+  </tr>
+</table>
 
-- 每次有效奖励或惩罚都会静默记录一次反馈，并异步启动独立的 Codex CLI 日记进程。
-- CLI 按“手动指定 → 外部独立 CLI（推荐）→ 桌面客户端内部 CLI（备用）”的顺序自动查找。
-- 控制栏设置按钮可以切换自动检测，或手动选择 Codex CLI 文件。
-- 找不到或无法运行 CLI 时，错误窗口会提供一段可直接复制给 Codex 的安装求助提示。
-- 当前只有“奖励日记”和“挨打日记”，没有自动生成的“收工日记”。
-- 日记参考当前 Codex 窗口的近期内容，以及最近三篇日记，用来保持角色和旧梗的连续性。
-- 原因输入是可选的；留空时 Codex 根据窗口上下文判断，不再传递冗余的“用户补充”字段。
-- 标题最多 20 个字符；正文不限制固定字数或段数。
-- 日记正文按实际渲染尺寸自动分页，当前页放不下的内容会原样续到下一页，不会压缩、截断或覆盖页脚。
-- 日记本支持拖动翻页，并使用独立的前封面与后封面插画。
+### 📖 它的反省，装订成册
 
-## 实际工作流程
+奖励和挨打分开记录。每篇日记都用 Codex 的第一人称写下，支持筛选、翻页与长文自动分页。
+
+<p align="center">
+  <img src="docs/media/diary.gif" alt="反省日记展开、翻页，以及按奖励类型筛选的演示" width="900" />
+</p>
+
+<details>
+<summary><strong>🔧 看看 CLI 一键更新演示</strong></summary>
+
+<br />
+
+使用新模型前，可以先检查本机 CLI。识别到支持的安装方式后，一键更新并验证实际调用的版本；更新成功会自动重试本次运行中失败的日记。
+
+<p align="center">
+  <img src="docs/media/cli-update.gif" alt="旧版 CLI 的更新提示、更新中状态和更新后的设置面板演示" width="640" />
+</p>
+
+更新失败会弹出可复制的排查说明，包含版本、安装方式、实际路径和错误详情，方便发给 Codex 继续处理。
+
+</details>
+
+> 演示使用当前项目界面和实际交互动效；会话背景、日记内容与 CLI 更新结果为示例数据。GIF 不含声音。素材说明见 [展示素材](docs/media/README.md)。
+
+<img src="docs/media/divider.svg" alt="" width="100%" />
+
+## 下载安装
+
+**[→ 前往 GitHub Releases 下载](https://github.com/Li-Rui-Zhe/VibeKarma/releases)**
+
+打开对应版本，展开页面下方的 **Assets**，选择与你的设备匹配的安装包：
+
+| 设备 | 安装包 | 说明 |
+| :--- | :--- | :--- |
+| Windows x64 | `VibeKarma_*_x64-setup.exe` | 常规安装，优先选这个。 |
+| Windows x64 | `VibeKarma_*_x64_en-US.msi` | 适用于 MSI 安装或企业部署。 |
+| Mac · Apple Silicon | `VibeKarma_*_aarch64.dmg` | M 系列芯片。 |
+| Mac · Intel | `VibeKarma_*_x64.dmg` | Intel 芯片。 |
+
+安装包目前尚未签名，Windows SmartScreen 或 macOS Gatekeeper 可能显示提醒。各下载版本的功能请以对应 Release 说明为准。
+
+## 快速开始
+
+### 1. 准备 Codex
+
+先安装并登录 [Codex CLI](https://developers.openai.com/codex/cli/)，再打开 Codex 桌面客户端，进入一个可见的任务窗口。
+
+VibeKarma 优先使用外部独立安装的 CLI；没有可用外部 CLI 时，会尝试桌面客户端内置的 CLI 作为备用。也可以在设置中手动选择 CLI 文件。
+
+### 2. 选一种反馈
+
+在 VibeKarma 中，可选地写一句原因，再点击 **鞭策一下** 或 **奖励一下**。
+
+| 动作 | 操作 | 撤回 |
+| :--- | :--- | :--- |
+| 鞭策 | 甩动鼠标；左键放手并结束这次交互。 | `Esc` 或鼠标右键。 |
+| 奖励 | 按住左键画出一个饱满的轮廓，松手兑现。 | `Esc` 或鼠标右键。 |
+
+轮廓太小或太薄时可以重新画。一次鞭策中可以连续抽击，结束后只记录一次反馈。
+
+### 3. 等它把这页日记写完
+
+反馈会触发一个独立的 Codex CLI 日记进程。写好后，点击 **反省日记**，看看它这次怎么解释。
 
 ```text
-点击奖惩按钮
-  → 检查并定位真实 Codex 桌面窗口
-  → 在目标窗口上显示透明互动层
-  → 用户完成抽鞭子或画大饼
-  → 静默记录一次反馈
-  → 独立 Codex CLI 进程生成日记
-  → 写入本地 SQLite
-  → 日记本收到事件并显示新日记
+选一种反馈 → 在 Codex 窗口上互动 → 记录一次反馈 → CLI 写日记 → 翻开日记本
 ```
 
-奖惩反馈不会注入、打断或改写当前 Codex 任务。Rust 后端只读取可见窗口的近期文本作为日记素材，日记生成与正在工作的 Codex 会话彼此独立。
+日记会参考当前可见窗口的近期内容与最近三篇日记；不填原因也可以使用。Mac 需要辅助功能授权才能读取聊天文本；未授权或读取失败时会提示，并改用反馈原因和近期日记。
 
-## 技术结构
+<img src="docs/media/divider.svg" alt="" width="100%" />
 
-- `src/`：React 界面、透明覆盖层、奖惩动效和日记本分页。
-- `src/components/WhipPhysics.tsx`：鼠标驱动的鞭子物理与命中判断。
-- `src/components/DrawPieIcon.tsx`：奖励按钮的画饼动效。
-- `src/components/DiaryBook.tsx`：封面、翻页和基于 DOM 测量的正文分页。
-- `src-tauri/src/codex_window.rs`：跨平台窗口识别入口、覆盖层定位和窗口模式。
-- `src-tauri/src/codex_window/macos.rs`：使用 macOS Core Graphics 识别并跟随 Codex 窗口。
-- `src-tauri/src/codex.rs`：反馈队列、日记提示词和独立 Codex CLI 调用。
-- `src-tauri/src/codex/resolver.rs`：统一的 CLI 优先级、状态和错误提示。
-- `src-tauri/src/codex/windows.rs`：Windows 外部 CLI 与桌面客户端备用 CLI 发现。
-- `src-tauri/src/codex/macos.rs`：macOS 外部 CLI 与应用 Bundle 备用 CLI 发现。
-- `src-tauri/src/storage.rs`：设置、事件日志和 SQLite 日记存储。
+## 常见问题
 
-主控制器默认为 `580 × 400`，打开日记本时切换为 `1000 × 700`。透明覆盖窗口只在奖惩互动期间显示。
+<details>
+<summary><strong>它会打断当前 Codex 任务，或者改变模型的行为吗？</strong></summary>
 
-## 运行要求
+<br />
 
-- Windows 10/11，或运行在 Intel / Apple Silicon 上的 macOS。
-- Node.js 22 或更高版本。
-- pnpm 10。
-- Rust stable 工具链。
-- Windows 开发需要 Visual C++ Build Tools、Windows SDK 和 WebView2 Runtime；macOS 开发需要 Xcode Command Line Tools。
-- 推荐安装并登录可正常运行的外部 Codex CLI；桌面客户端内部 CLI 仅作为兼容性备用。
-- 已打开且可见的 Codex 桌面客户端窗口。
+交互覆盖层负责动效，独立 CLI 进程负责写日记。反馈不会注入当前对话，也不会改写正在进行的 Codex 任务。这是一种有趣的协作留痕方式；它不会训练模型，也不保证模型下次改变行为。
 
-VibeKarma 不保存 OpenAI API Key。日记进程继承本机 Codex CLI 已有的登录、Provider 和 `CODEX_HOME` 配置；应用设置可以手动指定 Codex 可执行文件，本地 `settings.json` 仍可配置独立 `CODEX_HOME` 或额外环境变量。
+</details>
 
-## Codex CLI 发现顺序
+<details>
+<summary><strong>为什么推荐外部 CLI？和内置 CLI 有什么区别？</strong></summary>
 
-Windows 和 macOS 使用相同优先级：
+<br />
 
-```text
-用户手动指定的 CLI
-  → 外部独立安装的 CLI（推荐）
-  → Codex 桌面客户端内部 CLI（兼容性备用）
-  → 显示包含安装求助提示的错误信息
-```
+外部 CLI 可以按自己的安装方式更新，也便于查看版本和排查问题。内置 CLI 随 Codex 桌面客户端一起更新，其路径和启动权限可能随客户端版本变化，因此用于兼容性备用。
 
-外部 CLI 是公开、稳定的调用入口。桌面客户端内部文件可能随客户端更新改变，因此只用于兜底。VibeKarma 不会复制、打包或重新分发任何 Codex 二进制文件。
+一键更新会核对当前路径和版本，更新后再次验证同一路径。内置 CLI 会提示更新桌面客户端；无法识别安装方式或手动固定到旧版本目录时，会提供手动处理建议。
 
-自动检测会用短超时的 `codex --version` 检查候选 CLI；损坏的外部 CLI 会被自动跳过，再尝试其他外部安装或桌面客户端内部 CLI。旧设置中的 `codex`、`codex.cmd` 等命令名仍会从系统 `PATH` 解析，无需用户重新选择文件。
+</details>
 
-Windows 商店版桌面客户端位于系统管理的 `WindowsApps` 目录，其内部 CLI 可能不允许其他应用直接启动。VibeKarma 会把这种情况识别为“检测到但不可用”，并引导安装外部 CLI；请勿通过取得目录所有权或修改系统 ACL 来绕过限制。
+<details>
+<summary><strong>CLI 更新需要代理吗？失败了怎么办？</strong></summary>
+
+<br />
+
+是否需要代理取决于本机网络。检查和更新需要能访问官方发布服务及原安装方式的下载服务；应用不会自动开启代理。
+
+更新失败后，弹窗会提供修复文字和 **复制解决提示** 按钮，可以直接发给 Codex。修复后重新检测，再点击 **重试日记**，无需重新奖惩。
+
+待重试任务只保留在本次应用运行期间，关闭应用后不会保留。
+
+</details>
+
+<details>
+<summary><strong>支持 macOS 吗？</strong></summary>
+
+<br />
+
+支持 Intel 与 Apple Silicon Mac，使用原生窗口 API 识别和跟随桌面窗口。读取当前聊天内容需要在“系统设置 → 隐私与安全性 → 辅助功能”中允许 VibeKarma，应用设置中提供入口；未授权仍可奖惩和生成日记。
+
+CLI 更新代码适配了 Homebrew、npm 和官方独立安装方式。本次新增的聊天读取及更新流程仍待 Mac 原生运行验证，验证范围见 [Mac 验证说明](docs/MACOS_VERIFICATION.md)。
+
+</details>
+
+<details>
+<summary><strong>需要额外填写 API Key 吗？数据放在哪里？</strong></summary>
+
+<br />
+
+日记进程沿用本机 Codex CLI 的登录、Provider 和环境配置。正常使用已登录的 CLI 时，无需在 VibeKarma 中额外填写密钥。
+
+反馈日志、设置和日记保存在本地。有 D 盘时默认使用 `D:\VibeKarmaData`，否则使用系统应用数据目录；可通过 `VIBEKARMA_DATA_DIR` 更改。
+
+生成日记时，所需窗口上下文和近期日记会交给你配置的 Codex CLI / Provider 处理。更多说明见 [SECURITY.md](SECURITY.md)。
+
+</details>
 
 ## 本地开发
 
-```powershell
+项目使用 **Tauri 2 · React 19 · TypeScript · Rust · SQLite**。
+
+准备 Node.js 22+、pnpm 10 和 Rust stable，以及对应平台的桌面开发环境，然后运行：
+
+```bash
+git clone https://github.com/Li-Rui-Zhe/VibeKarma.git
+cd VibeKarma
 pnpm install
 pnpm run tauri dev
 ```
 
-如果 `1420` 端口已被旧的 Vite 进程占用，需要先关闭旧开发进程，再重新运行上述命令。
+测试、构建、数据目录与发布流程见 [开发指南](docs/DEVELOPMENT.md)。
 
-构建和测试：
+## 一起把这个小玩具做得更好
 
-```powershell
-pnpm test
-pnpm build
-cargo test --manifest-path src-tauri/Cargo.toml
-```
+欢迎提交 [Issue](https://github.com/Li-Rui-Zhe/VibeKarma/issues) 或 Pull Request。反馈问题时，带上系统、应用版本、CLI 版本与复现步骤，会更容易定位。
 
-只运行已构建的前端与 Tauri 后端：
+如果 VibeKarma 让你和 Codex 的协作多了一点乐趣，欢迎给它一颗 ⭐。
 
-```powershell
-pnpm build
-cargo run --manifest-path src-tauri/Cargo.toml --features tauri/custom-protocol
-```
+<img src="docs/media/divider.svg" alt="" width="100%" />
 
-## 数据位置
+<div align="center">
 
-有 D 盘时，应用默认使用 `D:\VibeKarmaData`；否则回退到系统应用数据目录。可以通过 `VIBEKARMA_DATA_DIR` 覆盖数据位置。
+**饼要画，活也要干。**
 
-```text
-settings.json
-events/YYYY-MM-DD.jsonl
-vibekarma.sqlite3
-```
+[Apache License 2.0](LICENSE) · Copyright 2026 LiRuiZhe · [NOTICE](NOTICE)
 
-旧版本的 `diaries/index.json` 会在首次启动时导入 SQLite，原文件不会被删除。
+<sub>随项目提供的字体资源遵循 SIL Open Font License 1.1，许可文本见 <code>src/assets/fonts/</code>。</sub>
 
-日记进程使用临时会话、`read-only` 沙箱和 `never` 审批策略。它的工作目录是 VibeKarma 数据目录，不会修改用户项目。
-
-## 发布
-
-推送 `v*` 标签会触发 GitHub Actions，创建草稿 Release，并构建四种安装包：Windows x64 NSIS、Windows x64 MSI、macOS Intel DMG 和 macOS Apple Silicon DMG。Windows 与 macOS 都会识别并跟随各自平台上的 Codex 桌面窗口。
-
-```powershell
-git tag v0.1.1
-git push origin v0.1.1
-```
-
-未配置代码签名时，Windows SmartScreen 和 macOS Gatekeeper 可能提示应用未签名。签名证书、SSH 私钥、API Key 和本地认证文件都不应提交到仓库。
-
-## 安全边界
-
-- React 前端不能直接执行任意系统命令。
-- 奖惩交互只覆盖已经识别到的可见 Codex 窗口。
-- 当前反馈流程不会模拟键盘输入，也不会写入系统剪贴板或当前 Codex 任务。
-- Codex 登录信息由本机 Codex CLI 管理，VibeKarma 不复制凭据。
-- 日记生成失败时记录本地错误，不会伪造一篇成功生成的日记。
-- `output/`、`tmp/`、日志、数据库、本地配置和 `badclaude/` 参考项目均不进入版本库。
-
-更完整的安全说明见 [SECURITY.md](./SECURITY.md)。
-
-## License
-
-[Apache License 2.0](./LICENSE)
-
-Copyright 2026 LiRuiZhe. See [NOTICE](./NOTICE) for attribution information.
-
-Bundled font assets remain under the SIL Open Font License 1.1; their license
-texts are included in `src/assets/fonts/`.
+</div>

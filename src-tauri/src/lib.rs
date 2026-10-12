@@ -11,7 +11,8 @@ use std::{
 use codex::CodexManager;
 use codex_window::CodexWindowInfo;
 use models::{
-    AppSettings, AppSnapshot, CodexCliInfo, DiaryEntry, FeedbackReceipt, FeedbackRequest,
+    AppSettings, AppSnapshot, CodexCliInfo, CodexCliUpdateInfo, CodexCliUpdateResult, DiaryEntry,
+    FeedbackReceipt, FeedbackRequest,
 };
 use storage::Storage;
 use tauri::{Manager, State};
@@ -33,6 +34,11 @@ impl CodexState {
 #[tauri::command]
 async fn inspect_codex_window() -> Result<CodexWindowInfo, String> {
     codex_window::inspect().await
+}
+
+#[tauri::command]
+async fn open_codex_context_permissions() -> Result<(), String> {
+    codex_window::open_context_permissions().await
 }
 
 #[tauri::command]
@@ -59,6 +65,7 @@ async fn record_desktop_feedback(
         thread_id: format!("desktop-window-{}", before.process_id),
         turn_id: None,
         diary_queued: true,
+        context_warning: before.context_warning,
     })
 }
 
@@ -103,6 +110,28 @@ fn list_diaries(state: State<'_, CodexState>) -> Result<Vec<DiaryEntry>, String>
     Ok(state.get()?.list_diaries())
 }
 
+#[tauri::command]
+async fn retry_failed_diaries(state: State<'_, CodexState>) -> Result<usize, String> {
+    Ok(state.get()?.retry_failed_reflections())
+}
+
+#[tauri::command]
+async fn check_codex_cli_update(
+    state: State<'_, CodexState>,
+    force: bool,
+) -> Result<CodexCliUpdateInfo, String> {
+    Ok(state.get()?.check_cli_update(force).await)
+}
+
+#[tauri::command]
+async fn update_codex_cli(
+    state: State<'_, CodexState>,
+    path: String,
+    version: String,
+) -> Result<CodexCliUpdateResult, String> {
+    state.get()?.update_cli(&path, &version).await
+}
+
 pub fn run() {
     #[cfg(target_os = "macos")]
     let _ = fix_path_env::fix();
@@ -138,13 +167,17 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             get_app_snapshot,
             inspect_codex_window,
+            open_codex_context_permissions,
             arm_codex_overlay,
             record_desktop_feedback,
             set_main_window_mode,
             hide_codex_overlay,
             save_settings,
             inspect_codex_cli,
-            list_diaries
+            list_diaries,
+            retry_failed_diaries,
+            check_codex_cli_update,
+            update_codex_cli
         ])
         .run(tauri::generate_context!())
         .expect("error while running VibeKarma");

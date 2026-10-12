@@ -14,6 +14,8 @@ use tauri::{PhysicalPosition, PhysicalSize};
 #[cfg(target_os = "windows")]
 use tokio::process::Command;
 
+#[cfg(any(target_os = "macos", test))]
+mod context_reader;
 #[cfg(target_os = "macos")]
 mod macos;
 
@@ -47,6 +49,8 @@ pub struct CodexWindowInfo {
     pub editor_has_draft: bool,
     #[serde(default, skip_serializing)]
     pub context: String,
+    #[serde(default)]
+    pub context_warning: Option<String>,
     pub error: Option<String>,
 }
 
@@ -331,7 +335,37 @@ async fn run_helper() -> Result<CodexWindowInfo, String> {
 
 #[cfg(target_os = "macos")]
 async fn run_helper() -> Result<CodexWindowInfo, String> {
-    macos::inspect()
+    tauri::async_runtime::spawn_blocking(macos::inspect)
+        .await
+        .map_err(|error| format!("macOS 窗口检测异常结束：{error}"))?
+}
+
+pub async fn open_context_permissions() -> Result<(), String> {
+    #[cfg(target_os = "macos")]
+    {
+        tauri::async_runtime::spawn_blocking(macos::request_accessibility)
+            .await
+            .map_err(|error| format!("无法请求辅助功能权限：{error}"))??;
+        let mut command = tokio::process::Command::new("/usr/bin/open");
+        command
+            .arg("x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility")
+            .stdin(std::process::Stdio::null())
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .kill_on_drop(true);
+        let status = tokio::time::timeout(Duration::from_secs(5), command.status())
+            .await
+            .map_err(|_| {
+                "打开系统设置超时，请手动进入系统设置 → 隐私与安全性 → 辅助功能。".to_owned()
+            })?
+            .map_err(|error| format!("无法打开系统设置：{error}"))?;
+        if !status.success() {
+            return Err("请手动进入系统设置 → 隐私与安全性 → 辅助功能，允许 VibeKarma。".into());
+        }
+        Ok(())
+    }
+    #[cfg(not(target_os = "macos"))]
+    Err("此授权入口仅适用于 macOS。".into())
 }
 
 #[cfg(not(any(target_os = "windows", target_os = "macos")))]
@@ -349,6 +383,7 @@ async fn run_helper() -> Result<CodexWindowInfo, String> {
         editor_found: false,
         editor_has_draft: false,
         context: String::new(),
+        context_warning: None,
         error: Some("当前系统暂不支持 Codex 窗口检测".to_owned()),
     })
 }
@@ -371,6 +406,7 @@ mod tests {
             editor_found: false,
             editor_has_draft: true,
             context: String::new(),
+            context_warning: None,
             error: None,
         }
     }
@@ -379,6 +415,17 @@ mod tests {
     fn silent_feedback_does_not_require_an_editor_or_empty_draft() {
         super::ensure_visible_window(&visible_window())
             .expect("silent feedback only needs a visible Codex window");
+    }
+
+    #[test]
+    fn missing_context_warns_without_blocking_feedback_or_exposing_chat_text() {
+        let mut info = visible_window();
+        info.context = "聊天内容不应返回前端".into();
+        info.context_warning = Some("请授权辅助功能".into());
+        super::ensure_visible_window(&info).unwrap();
+        let json = serde_json::to_value(&info).unwrap();
+        assert_eq!(json["contextWarning"], "请授权辅助功能");
+        assert!(json.get("context").is_none());
     }
 
     #[cfg(target_os = "windows")]

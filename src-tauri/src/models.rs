@@ -16,6 +16,7 @@ pub struct AppSnapshot {
     pub settings: AppSettings,
     pub diaries: Vec<DiaryEntry>,
     pub data_dir: String,
+    pub failed_diary_count: usize,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -31,7 +32,28 @@ pub struct CodexCliInfo {
     pub available: bool,
     pub source: Option<String>,
     pub path: Option<String>,
+    pub version: Option<String>,
+    pub update_help: Option<String>,
     pub message: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CodexCliUpdateInfo {
+    pub path: Option<String>,
+    pub current_version: Option<String>,
+    pub latest_version: Option<String>,
+    pub status: String,
+    pub can_update: bool,
+    pub method: Option<String>,
+    pub message: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CodexCliUpdateResult {
+    pub cli: CodexCliInfo,
+    pub retried_count: usize,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -64,6 +86,8 @@ pub struct FeedbackReceipt {
     pub thread_id: String,
     pub turn_id: Option<String>,
     pub diary_queued: bool,
+    #[serde(default)]
+    pub context_warning: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -98,4 +122,11 @@ pub struct DiaryDraft {
 pub struct CodexLogEvent {
     pub level: String,
     pub message: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DiaryGenerationFailure {
+    pub message: String,
+    pub pending_count: usize,
 }

@@ -2,6 +2,12 @@ use std::ffi::{c_char, c_void, CStr};
 
 use super::{CodexWindowInfo, WindowBounds};
 
+#[path = "macos/accessibility.rs"]
+mod accessibility;
+pub(super) fn request_accessibility() -> Result<(), String> {
+    accessibility::request_accessibility()
+}
+
 type CFIndex = isize;
 type CFTypeRef = *const c_void;
 type CFArrayRef = *const c_void;
@@ -11,8 +17,8 @@ type CFStringRef = *const c_void;
 type CGWindowID = u32;
 
 const K_CF_STRING_ENCODING_UTF8: u32 = 0x0800_0100;
-const K_CF_NUMBER_SINT64_TYPE: u32 = 4;
-const K_CF_NUMBER_FLOAT64_TYPE: u32 = 6;
+const K_CF_NUMBER_SINT64_TYPE: CFIndex = 4;
+const K_CF_NUMBER_FLOAT64_TYPE: CFIndex = 6;
 const K_CG_WINDOW_LIST_OPTION_ON_SCREEN_ONLY: u32 = 1;
 const K_CG_WINDOW_LIST_OPTION_ON_SCREEN_ABOVE_WINDOW: u32 = 2;
 const K_CG_WINDOW_LIST_OPTION_INCLUDING_WINDOW: u32 = 8;
@@ -44,7 +50,7 @@ unsafe extern "C" {
     fn CFArrayGetCount(array: CFArrayRef) -> CFIndex;
     fn CFArrayGetValueAtIndex(array: CFArrayRef, index: CFIndex) -> *const c_void;
     fn CFDictionaryGetValue(dictionary: CFDictionaryRef, key: *const c_void) -> *const c_void;
-    fn CFNumberGetValue(number: CFNumberRef, number_type: u32, value: *mut c_void) -> bool;
+    fn CFNumberGetValue(number: CFNumberRef, number_type: CFIndex, value: *mut c_void) -> u8;
     fn CFRelease(value: CFTypeRef);
     fn CFStringGetCString(
         string: CFStringRef,
@@ -67,10 +73,8 @@ unsafe extern "C" {
     static kCGWindowOwnerPID: CFStringRef;
 
     fn CGWindowListCopyWindowInfo(option: u32, relative_to_window: CGWindowID) -> CFArrayRef;
-    fn CGRectMakeWithDictionaryRepresentation(
-        dictionary: CFDictionaryRef,
-        rect: *mut CGRect,
-    ) -> i32;
+    fn CGRectMakeWithDictionaryRepresentation(dictionary: CFDictionaryRef, rect: *mut CGRect)
+        -> u8;
 }
 
 struct OwnedCF(CFTypeRef);
@@ -99,21 +103,29 @@ pub(super) fn inspect() -> Result<CodexWindowInfo, String> {
     .find(|window| is_codex_owner(&window.owner));
 
     Ok(match window {
-        Some(window) => CodexWindowInfo {
-            ok: true,
-            found: true,
-            handle: i64::from(window.id),
-            process_id: window.process_id,
-            left: window.bounds.left,
-            top: window.bounds.top,
-            width: window.bounds.width,
-            height: window.bounds.height,
-            working: false,
-            editor_found: false,
-            editor_has_draft: false,
-            context: String::new(),
-            error: None,
-        },
+        Some(window) => {
+            let context = accessibility::read_window_context(window.process_id, window.bounds);
+            let (context, context_warning) = match context {
+                Ok(text) => (text, None),
+                Err(warning) => (String::new(), Some(warning)),
+            };
+            CodexWindowInfo {
+                ok: true,
+                found: true,
+                handle: i64::from(window.id),
+                process_id: window.process_id,
+                left: window.bounds.left,
+                top: window.bounds.top,
+                width: window.bounds.width,
+                height: window.bounds.height,
+                working: false,
+                editor_found: false,
+                editor_has_draft: false,
+                context,
+                context_warning,
+                error: None,
+            }
+        }
         None => CodexWindowInfo {
             ok: true,
             found: false,
@@ -127,6 +139,7 @@ pub(super) fn inspect() -> Result<CodexWindowInfo, String> {
             editor_found: false,
             editor_has_draft: false,
             context: String::new(),
+            context_warning: None,
             error: None,
         },
     })
@@ -227,22 +240,22 @@ unsafe fn dictionary_value(dictionary: CFDictionaryRef, key: CFStringRef) -> Opt
 
 unsafe fn number_i64(number: *const c_void) -> Option<i64> {
     let mut value = 0_i64;
-    CFNumberGetValue(
+    (CFNumberGetValue(
         number as CFNumberRef,
         K_CF_NUMBER_SINT64_TYPE,
         (&mut value as *mut i64).cast(),
-    )
-    .then_some(value)
+    ) != 0)
+        .then_some(value)
 }
 
 unsafe fn number_f64(number: *const c_void) -> Option<f64> {
     let mut value = 0_f64;
-    CFNumberGetValue(
+    (CFNumberGetValue(
         number as CFNumberRef,
         K_CF_NUMBER_FLOAT64_TYPE,
         (&mut value as *mut f64).cast(),
-    )
-    .then_some(value)
+    ) != 0)
+        .then_some(value)
 }
 
 unsafe fn cf_string(string: *const c_void) -> Option<String> {
