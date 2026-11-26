@@ -102,9 +102,14 @@ pub(super) fn inspect() -> Result<CodexWindowInfo, String> {
     .into_iter()
     .find(|window| is_codex_owner(&window.owner));
 
+    let accessibility_granted = accessibility::accessibility_granted();
     Ok(match window {
         Some(window) => {
-            let context = accessibility::read_window_context(window.process_id, window.bounds);
+            let context = accessibility::read_window_context(
+                window.process_id,
+                window.bounds,
+                accessibility_granted,
+            );
             let (context, context_warning) = match context {
                 Ok(text) => (text, None),
                 Err(warning) => (String::new(), Some(warning)),
@@ -122,6 +127,7 @@ pub(super) fn inspect() -> Result<CodexWindowInfo, String> {
                 editor_found: false,
                 editor_has_draft: false,
                 context,
+                accessibility_granted: Some(accessibility_granted),
                 context_warning,
                 error: None,
             }
@@ -139,6 +145,7 @@ pub(super) fn inspect() -> Result<CodexWindowInfo, String> {
             editor_found: false,
             editor_has_draft: false,
             context: String::new(),
+            accessibility_granted: Some(accessibility_granted),
             context_warning: None,
             error: None,
         },

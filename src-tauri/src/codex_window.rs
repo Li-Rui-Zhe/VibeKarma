@@ -51,6 +51,8 @@ pub struct CodexWindowInfo {
     pub context: String,
     #[serde(default)]
     pub context_warning: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub accessibility_granted: Option<bool>,
     pub error: Option<String>,
 }
 
@@ -383,6 +385,7 @@ async fn run_helper() -> Result<CodexWindowInfo, String> {
         editor_found: false,
         editor_has_draft: false,
         context: String::new(),
+        accessibility_granted: None,
         context_warning: None,
         error: Some("当前系统暂不支持 Codex 窗口检测".to_owned()),
     })
@@ -406,6 +409,7 @@ mod tests {
             editor_found: false,
             editor_has_draft: true,
             context: String::new(),
+            accessibility_granted: None,
             context_warning: None,
             error: None,
         }

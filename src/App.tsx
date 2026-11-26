@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { open as openFile } from "@tauri-apps/plugin-dialog";
 import {
@@ -38,6 +38,7 @@ import type {
 } from "./types";
 
 type View = "control" | "diary";
+type SettingsSection = "cli" | "chatContext";
 
 const SNAPSHOT_TIMEOUT_MS = 5_000;
 const SNAPSHOT_ATTEMPTS = 3;
@@ -56,7 +57,7 @@ function App() {
   const [retryingDiaries, setRetryingDiaries] = useState(false);
   const [actionPulse, setActionPulse] = useState<FeedbackKind | null>(null);
   const [toast, setToast] = useState<string | null>(null);
-  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [settingsSection, setSettingsSection] = useState<SettingsSection | null>(null);
   const [settingsPath, setSettingsPath] = useState("");
   const [settingsSaving, setSettingsSaving] = useState(false);
   const [openingContextPermissions, setOpeningContextPermissions] = useState(false);
@@ -157,7 +158,9 @@ function App() {
     const info = await refreshCliInfo(false);
     if (info?.available) {
       setCliError(null);
-      showToast(setToast, `CLI 已重新检测${info.version ? ` · ${info.version}` : ""}，尚未验证模型调用`);
+      if (settingsSection !== "chatContext") {
+        showToast(setToast, `CLI 已重新检测${info.version ? ` · ${info.version}` : ""}，尚未验证模型调用`);
+      }
       void refreshCliUpdate();
     } else if (info) {
       setCliError(info.message);
@@ -169,7 +172,7 @@ function App() {
     setOpeningContextPermissions(true);
     try {
       await backend.openCodexContextPermissions();
-      showToast(setToast, "请在辅助功能中允许 VibeKarma，开启后点击重新检测");
+      showToast(setToast, "开启辅助功能后，返回此窗口即可查看授权状态");
     } catch (error) {
       showToast(setToast, String(error));
     } finally {
@@ -242,18 +245,21 @@ function App() {
   }, [refreshWindow]);
 
   useEffect(() => {
-    let alive = true;
     void loadSnapshot();
     void refreshWindow();
     void refreshCliInfo(true);
-    const timer = window.setInterval(() => {
-      if (alive && view === "control") void refreshWindow();
-    }, 5000);
+  }, [loadSnapshot, refreshCliInfo, refreshWindow, view]);
+
+  useEffect(() => {
+    if (view !== "control" && !settingsSection) return;
+    if (settingsSection) void refreshWindow();
+    window.addEventListener("focus", refreshWindow);
+    const timer = window.setInterval(refreshWindow, 5000);
     return () => {
-      alive = false;
+      window.removeEventListener("focus", refreshWindow);
       window.clearInterval(timer);
     };
-  }, [loadSnapshot, refreshCliInfo, refreshWindow, view]);
+  }, [refreshWindow, settingsSection, view]);
 
   useEffect(() => {
     let alive = true;
@@ -316,11 +322,11 @@ function App() {
   }, [deliverFeedback, refreshWindow, refreshCliUpdate]);
 
   useEffect(() => {
-    if (settingsOpen && !cliUpdating) {
+    if (settingsSection && !cliUpdating) {
       void refreshCliInfo(false);
       void refreshCliUpdate();
     }
-  }, [refreshCliInfo, refreshCliUpdate, settingsOpen, cliUpdating]);
+  }, [refreshCliInfo, refreshCliUpdate, settingsSection, cliUpdating]);
 
   useEffect(() => {
     const mode = view === "diary" ? "diary" : "compact";
@@ -446,7 +452,7 @@ function App() {
         view={view}
         diaryCount={snapshot.diaries.length}
         reflectionCount={reflectionCount}
-        onOpenSettings={() => setSettingsOpen(true)}
+        onOpenSettings={() => setSettingsSection("cli")}
         onToggleView={() => setView(view === "diary" ? "control" : "diary")}
       />
 
@@ -464,12 +470,12 @@ function App() {
                 查看解决方案
               </button>
             ) : cliUpdating || cliUpdateInfo?.status === "available" ? (
-              <button className="codex-status__action codex-status__action--update" type="button" disabled={cliUpdating || updateDisabled} onClick={() => cliUpdateInfo?.canUpdate ? void performCliUpdate() : setSettingsOpen(true)}>
+              <button className="codex-status__action codex-status__action--update" type="button" disabled={cliUpdating || updateDisabled} onClick={() => cliUpdateInfo?.canUpdate ? void performCliUpdate() : setSettingsSection("cli")}>
                 {cliUpdating ? <LoaderCircle className="spin" size={13} /> : <Download size={13} />}
                 {cliUpdating ? "更新中…" : cliUpdateInfo?.canUpdate ? "一键更新" : "查看更新"}
               </button>
-            ) : codexWindow?.contextWarning ? (
-              <button className="codex-status__action" type="button" onClick={() => setSettingsOpen(true)}>查看原因</button>
+            ) : codexWindow?.found && codexWindow.accessibilityGranted === false ? (
+              <button className="codex-status__action codex-status__action--settings" type="button" onClick={() => setSettingsSection("chatContext")}>去设置</button>
             ) : (
               <WorkPulseIcon />
             )}
@@ -590,14 +596,15 @@ function App() {
         />
       )}
 
-      {settingsOpen && (
+      {settingsSection && (
         <CodexSettingsDialog
+          initialSection={settingsSection}
           path={settingsPath}
           info={cliInfo}
           saving={settingsSaving || cliUpdating}
           checking={cliChecking || cliUpdating}
           updateControls={updateControls}
-          contextWarning={codexWindow?.contextWarning ?? null}
+          windowInfo={codexWindow}
           openingContextPermissions={openingContextPermissions}
           onContextPermissions={() => void openContextPermissions()}
           onPathChange={setSettingsPath}
@@ -607,7 +614,7 @@ function App() {
           onShowHelp={() => cliInfo && setCliError(cliInfo.message)}
           onUpdateHelp={() => cliInfo?.updateHelp && setCliError(cliInfo.updateHelp)}
           onRecheck={() => void recheckCli()}
-          onClose={() => setSettingsOpen(false)}
+          onClose={() => setSettingsSection(null)}
         />
       )}
 
@@ -620,7 +627,7 @@ function App() {
           onRetryDiaries={() => void retryFailedDiaries()}
           onOpenSettings={() => {
             setCliError(null);
-            setSettingsOpen(true);
+            setSettingsSection("cli");
           }}
           onCopy={() => {
             const issue = parseCodexIssue(cliError);
@@ -683,12 +690,13 @@ function CliUpdatePanel({ info, checking, updating, disabled, onCheck, onUpdate 
 }
 
 interface CodexSettingsDialogProps {
+  initialSection: SettingsSection;
   path: string;
   info: CodexCliInfo | null;
   saving: boolean;
   checking: boolean;
   updateControls: React.ReactNode;
-  contextWarning: string | null;
+  windowInfo: CodexWindowInfo | null;
   openingContextPermissions: boolean;
   onContextPermissions: () => void;
   onPathChange: (path: string) => void;
@@ -702,12 +710,13 @@ interface CodexSettingsDialogProps {
 }
 
 function CodexSettingsDialog({
+  initialSection,
   path,
   info,
   saving,
   checking,
   updateControls,
-  contextWarning,
+  windowInfo,
   openingContextPermissions,
   onContextPermissions,
   onPathChange,
@@ -719,6 +728,15 @@ function CodexSettingsDialog({
   onRecheck,
   onClose,
 }: CodexSettingsDialogProps) {
+  const contextSectionRef = useRef<HTMLElement>(null);
+  const granted = windowInfo?.accessibilityGranted;
+  useLayoutEffect(() => {
+    if (initialSection === "chatContext") {
+      contextSectionRef.current?.focus({ preventScroll: true });
+      contextSectionRef.current?.scrollIntoView({ block: "start" });
+    }
+  }, [initialSection]);
+
   return (
     <div className="dialog-backdrop" role="presentation" onMouseDown={(event) => {
       if (event.target === event.currentTarget) onClose();
@@ -759,13 +777,18 @@ function CodexSettingsDialog({
           {updateControls}
 
           {IS_MACOS && (
-            <section className={`context-access ${contextWarning ? "context-access--warning" : ""}`} aria-label="聊天内容读取">
-              <strong>让日记参考当前聊天</strong>
-              <p>{contextWarning ?? "读取 Codex 当前窗口的聊天文本，需要辅助功能授权。不会输入文字或读取未发送草稿。"}</p>
-              <button className="dialog-button dialog-button--quiet" type="button" onClick={onContextPermissions} disabled={openingContextPermissions}>
-                {openingContextPermissions ? "正在打开…" : "打开辅助功能设置"}
-              </button>
-              <small>允许 VibeKarma 后点击“重新检测”。若仍提示无权限，请退出并重新打开应用。</small>
+            <section ref={contextSectionRef} tabIndex={-1} className={`context-access ${granted === false ? "context-access--warning" : ""}`} aria-labelledby="context-access-title" aria-describedby="context-access-description">
+              <strong id="context-access-title">让日记参考当前聊天（可选）</strong>
+              <p id="context-access-description" role="status">
+                {granted === true ? "辅助功能已授权。" : granted === false ? "当前运行的应用尚未获得辅助功能权限。奖惩仍可正常使用。" : windowInfo?.error ?? (windowInfo ? "未取得辅助功能授权状态。" : "正在检测辅助功能权限…")}
+              </p>
+              {granted === true && <small>{windowInfo?.contextWarning ?? (windowInfo?.found ? "日记可以参考当前聊天。" : "打开 Codex 聊天窗口后，日记即可参考聊天内容。")}</small>}
+              {granted === false && <>
+                <button className="dialog-button dialog-button--primary" type="button" onClick={onContextPermissions} disabled={openingContextPermissions}>
+                  {openingContextPermissions ? "正在打开…" : "打开辅助功能设置"}
+                </button>
+                <small>开启系统提示的应用后返回，此处会自动更新。若已开启，可退出并重新打开当前版本。</small>
+              </>}
             </section>
           )}
 
@@ -1122,7 +1145,8 @@ function appStatus(
   };
   if (detecting && !info) return { tone: "checking", title: "正在寻找 Codex", detail: "检查桌面窗口" };
   if (!info?.found) return { tone: "offline", title: "没有找到 Codex", detail: "请先打开 Codex 桌面客户端" };
-  if (info.contextWarning) return { tone: "update", title: "聊天内容暂未读取", detail: "奖惩可继续使用 · 日记将参考原因和近期日记" };
+  if (info.accessibilityGranted === false) return { tone: "ready", title: "Codex 已就绪", detail: "奖惩可正常使用，可在设置中让日记参考当前聊天" };
+  if (info.contextWarning) return { tone: "ready", title: "Codex 已就绪", detail: "当前聊天暂时无法读取，日记将参考反馈原因和近期日记" };
   return { tone: "ready", title: "Codex 已就绪", detail: "动效结束后会静默写入日记" };
 }
 

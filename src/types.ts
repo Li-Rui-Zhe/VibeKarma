@@ -75,6 +75,7 @@ export interface CodexWindowInfo {
   working: boolean;
   editorFound: boolean;
   editorHasDraft: boolean;
+  accessibilityGranted?: boolean;
   contextWarning?: string | null;
   error: string | null;
 }

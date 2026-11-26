@@ -112,6 +112,12 @@ cli-update-cache/              更新缓存与临时下载
 
 macOS 读取聊天内容需要辅助功能授权；未授权或读取失败不会阻止奖惩，会显示提示并降级生成日记。实现范围与后续验证步骤见 [Mac 验证说明](MACOS_VERIFICATION.md)。
 
+复测 Mac 授权时，可以给本地测试包使用独立的名称和应用标识。这样能在系统辅助功能列表中直接区分正式版与测试版。运行下面的命令后，从 Finder 启动生成的 VibeKarma Test.app，并在系统设置中允许这一项。独立标识使用独立的默认数据目录。
+
+```bash
+pnpm run tauri build --debug --bundles app --config '{"productName":"VibeKarma Test","identifier":"com.vibekarma.localtest"}'
+```
+
 ## 发布流程
 
 `.github/workflows/release.yml` 在推送 `v*` 标签时构建 Windows x64 NSIS/MSI、macOS Intel DMG 和 Apple Silicon DMG，生成草稿 Release。检查安装包及说明后，再发布草稿。

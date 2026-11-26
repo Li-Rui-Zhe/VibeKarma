@@ -15,7 +15,7 @@
 
 [下载](#下载安装) · [演示](#动态演示) · [上手](#快速开始) · [FAQ](#常见问题) · [开发](docs/DEVELOPMENT.md)
 
-**当前版本：[v0.2.0](https://github.com/Li-Rui-Zhe/VibeKarma/releases/tag/v0.2.0)** · CLI 更新与失败重试 · Mac 聊天读取与授权提示
+**当前版本：[v0.2.1](https://github.com/Li-Rui-Zhe/VibeKarma/releases/tag/v0.2.1)** · Mac 聊天权限可选，授权后自动刷新
 
 </div>
 
@@ -76,22 +76,30 @@
 
 </details>
 
-> 演示使用当前项目界面和实际交互动效；会话背景、日记内容与 CLI 更新结果为示例数据。GIF 不含声音。素材说明见 [展示素材](docs/media/README.md)。
+### 🍎 让日记参考当前聊天
+
+Mac 上点击「去设置」，会直接定位到聊天权限卡片。允许辅助功能后切回应用，卡片会显示「辅助功能已授权」，主页上的「去设置」随即消失。你也可以跳过授权，继续奖惩和写日记。
+
+<p align="center">
+  <img src="docs/media/mac-chat-permission.gif" alt="Mac 控制台打开聊天权限卡片，授权后卡片恢复常态，返回主页时设置入口消失" width="580" />
+</p>
+
+> 演示使用当前项目界面和实际交互动效；会话背景、日记内容、CLI 更新结果和权限切换使用演示数据。GIF 不含声音。素材说明见 [展示素材](docs/media/README.md)。
 
 <img src="docs/media/divider.svg" alt="" width="100%" />
 
 ## 下载安装
 
-**[→ 下载 v0.2.0](https://github.com/Li-Rui-Zhe/VibeKarma/releases/tag/v0.2.0)** · [查看版本说明](docs/releases/v0.2.0.md)
+**[→ 下载 v0.2.1](https://github.com/Li-Rui-Zhe/VibeKarma/releases/tag/v0.2.1)** · [查看版本说明](docs/releases/v0.2.1.md)
 
 打开对应版本，展开页面下方的 **Assets**，选择与你的设备匹配的安装包：
 
 | 设备 | 安装包 | 说明 |
 | :--- | :--- | :--- |
-| Windows x64 | `VibeKarma_0.2.0_x64-setup.exe` | 常规安装，优先选这个。 |
-| Windows x64 | `VibeKarma_0.2.0_x64_en-US.msi` | 适用于 MSI 安装或企业部署。 |
-| Mac · Apple Silicon | `VibeKarma_0.2.0_aarch64.dmg` | M 系列芯片。 |
-| Mac · Intel | `VibeKarma_0.2.0_x64.dmg` | Intel 芯片。 |
+| Windows x64 | `VibeKarma_0.2.1_x64-setup.exe` | 常规安装，优先选这个。 |
+| Windows x64 | `VibeKarma_0.2.1_x64_en-US.msi` | 适用于 MSI 安装或企业部署。 |
+| Mac · Apple Silicon | `VibeKarma_0.2.1_aarch64.dmg` | M 系列芯片。 |
+| Mac · Intel | `VibeKarma_0.2.1_x64.dmg` | Intel 芯片。 |
 
 安装包目前尚未签名，Windows SmartScreen 或 macOS Gatekeeper 可能显示提醒。各下载版本的功能请以对应 Release 说明为准。
 
@@ -99,10 +107,10 @@
 
 1. 在“关于本机”查看芯片，选择对应的 DMG，将 **VibeKarma.app** 拖入“应用程序”，再从“应用程序”启动。
 2. 首次打开若提示开发者无法验证，确认来自本仓库后，按 [Apple 官方说明](https://support.apple.com/zh-cn/102445) 在“系统设置 → 隐私与安全性”中选择“仍要打开”。
-3. 读取聊天需要在“系统设置 → 隐私与安全性 → 辅助功能”中允许 **VibeKarma**。应用设置中也有入口；授权后重新检测，若权限未生效，退出应用后重开。更新安装后也可能需要重新授权。
+3. 读取聊天需要在“系统设置 → 隐私与安全性 → 辅助功能”中允许 **VibeKarma**。点击主页「去设置」可直接定位到权限卡片。授权后切回应用会自动检测。
 4. 保持 Codex 聊天窗口可见，并安装、登录外部 Codex CLI。未授权、聊天读取失败或超时时会显示原因，仍可奖惩，日记改用填写原因和近期日记。
 
-Intel 与 Apple Silicon 的原生测试、完整构建、基础启动和 DMG 打包已通过 Actions。实际聊天、人工授权、Finder 首次打开与多显示器互动仍需真机验证，详细范围见 [Mac 使用说明](docs/MACOS.md) 和 [验证记录](docs/MACOS_VERIFICATION.md)。
+已在 Intel Mac 上验证授权前后的界面、返回应用自动刷新和当前聊天读取状态。安装与验证范围见 [Mac 使用说明](docs/MACOS.md) 和 [验证记录](docs/MACOS_VERIFICATION.md)。
 
 ## 快速开始
 
@@ -177,7 +185,7 @@ VibeKarma 优先使用外部独立安装的 CLI；没有可用外部 CLI 时，�
 
 支持 Intel 与 Apple Silicon Mac，使用原生窗口 API 识别和跟随桌面窗口。读取当前聊天内容需要在“系统设置 → 隐私与安全性 → 辅助功能”中允许 VibeKarma，应用设置中提供入口；未授权仍可奖惩和生成日记。
 
-CLI 更新代码适配了 Homebrew、npm 和官方独立安装方式；内置 CLI 随 Codex 桌面客户端更新。Intel 与 Apple Silicon 的 Actions 原生测试、构建、基础启动和 DMG 打包已通过；实际聊天、人工授权和更新交互仍需真机验证。安装与排查步骤见 [Mac 使用说明](docs/MACOS.md)。
+CLI 更新代码适配了 Homebrew、npm 和官方独立安装方式；内置 CLI 随 Codex 桌面客户端更新。授权后如果只是窗口暂时读不到文本，主页会说明日记使用的素材。安装与排查步骤见 [Mac 使用说明](docs/MACOS.md)。
 
 </details>
 

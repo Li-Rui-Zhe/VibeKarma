@@ -53,6 +53,7 @@ jobs:
             core.info(`Draft release: ${release.html_url}`);
             await core.summary.addLink('Review draft release', release.html_url).write();
   publish:
+    name: ${{ matrix.label }} · draft ${{ needs.prepare.outputs.release_id }}
     needs: prepare
     strategy:
       fail-fast: false

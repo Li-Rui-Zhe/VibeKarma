@@ -1,15 +1,15 @@
 # 🍎 VibeKarma Mac 使用说明
 
-[← 返回首页](../README.md) · [v0.2.0 下载](https://github.com/Li-Rui-Zhe/VibeKarma/releases/tag/v0.2.0) · [提交 Bug](https://github.com/Li-Rui-Zhe/VibeKarma/issues/new?template=bug_report.yml)
+[← 返回首页](../README.md) · [v0.2.1 下载](https://github.com/Li-Rui-Zhe/VibeKarma/releases/tag/v0.2.1) · [提交 Bug](https://github.com/Li-Rui-Zhe/VibeKarma/issues/new?template=bug_report.yml)
 
 ## 选择安装包
 
 在苹果菜单中打开“关于本机”，查看芯片或处理器。
 
-| 设备 | v0.2.0 安装包 |
+| 设备 | v0.2.1 安装包 |
 | --- | --- |
-| Apple Silicon，M 系列芯片 | `VibeKarma_0.2.0_aarch64.dmg` |
-| Intel Mac | `VibeKarma_0.2.0_x64.dmg` |
+| Apple Silicon，M 系列芯片 | `VibeKarma_0.2.1_aarch64.dmg` |
+| Intel Mac | `VibeKarma_0.2.1_x64.dmg` |
 
 打开 DMG，将 **VibeKarma.app** 拖入“应用程序”，然后从“应用程序”打开。更新前先退出正在运行的 VibeKarma，再替换应用。
 
@@ -23,10 +23,11 @@
 
 读取当前 Codex 聊天需要允许 VibeKarma 使用辅助功能。
 
-1. 在 VibeKarma 设置中点击“打开辅助功能设置”，或手动进入“系统设置 → 隐私与安全性 → 辅助功能”。
-2. 允许已安装的 **VibeKarma**。没有该条目时，可添加“应用程序”里的 VibeKarma.app。
-3. 回到应用重新检测。若仍提示没有权限，退出后重新打开应用；更新后权限失效时也需要重新授权。
-4. 打开 Codex 桌面客户端，让需要互动的聊天窗口保持可见，再尝试奖惩。
+1. 保持 Codex 聊天窗口可见，在 VibeKarma 主页点「去设置」，会定位到「让日记参考当前聊天（可选）」。
+2. 点「打开辅助功能设置」，在系统列表中开启当前运行的 **VibeKarma**。如果列表缺少它，用加号选择安装到「应用程序」的 VibeKarma.app。
+3. 切回 VibeKarma，看到「辅助功能已授权」即已生效。关闭设置后，「去设置」会消失。如果暂时读不到聊天，卡片会给出本次读取的提示。
+
+**开关已经打开，卡片仍提示未授权？** 先确认从「应用程序」中启动了刚安装的版本。若更新或换包后仍有同名旧授权，退出应用，在 macOS 辅助功能列表中移除旧条目，再添加现在使用的 VibeKarma.app 并开启，随后重新打开应用。移除该条目只会撤销对应的系统授权。开发测试包若使用独立名称，需要开启测试包自己的条目。
 
 应用启动和定期检测只检查权限，用户点击设置入口时才请求授权。读取会跳过输入框、未发送草稿、密码框等内容；聊天素材会交给本机 CLI 配置的 Provider 生成日记，数据说明见 [SECURITY.md](../SECURITY.md)。
 
@@ -48,8 +49,6 @@
 
 ## 验证范围与反馈
 
-v0.2.0 的 Intel 和 Apple Silicon 原生测试、完整构建、基础启动及 DMG 打包检查已在 GitHub Actions 通过。基础启动检查覆盖进程存活与数据库初始化。
-
-安装后的 Finder 首次打开、人工权限授权、实际 Codex 聊天读取、CLI 更新交互与多显示器互动仍需真机验证。完整记录见 [Mac 验证说明](MACOS_VERIFICATION.md)。
+已在 Intel Mac 的独立测试包上验证可选权限入口、系统授权后的自动刷新和当前聊天读取状态。GitHub Actions 负责跨平台构建、测试和基础启动检查。具体场景见 [Mac 验证说明](MACOS_VERIFICATION.md)。
 
 **遇到 Bug，欢迎 [提交 Issue](https://github.com/Li-Rui-Zhe/VibeKarma/issues/new?template=bug_report.yml)。** 请提供 macOS 版本、芯片、应用与 CLI 版本、授权状态、显示器情况、复现步骤和预期 / 实际结果。截图、日志和错误摘要请移除密钥与私人聊天内容。

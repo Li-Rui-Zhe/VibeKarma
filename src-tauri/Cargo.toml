@@ -1,6 +1,6 @@
 [package]
 name = "vibekarma"
-version = "0.2.0"
+version = "0.2.1"
 description = "A warm, feedback-driven desktop client for Codex"
 authors = ["LiRuiZhe"]
 edition = "2021"

@@ -450,6 +450,8 @@ button:disabled { cursor: not-allowed; opacity: 0.46; }
 }
 
 .codex-status__action:hover { background: #f7ddd6; }
+.codex-status__action--settings { color: var(--forest); background: transparent; border-color: #c7cfc5; }
+.codex-status__action--settings:hover { background: #eaf0e8; }
 .codex-status__action:disabled { cursor: wait; opacity: 0.55; }
 .codex-status__action--update {
   display: inline-flex;
@@ -1466,9 +1468,10 @@ button:disabled { cursor: not-allowed; opacity: 0.46; }
 
 .settings-field { display: flex; flex-direction: column; gap: 7px; }
 .context-access { display: flex; flex-direction: column; gap: 8px; padding: 12px; background: rgb(23 61 51 / 4%); border: 1px solid #d7d6c8; border-radius: 9px; }
-.context-access--warning { background: #f8f2e4; border-color: #e2cda0; }
+.context-access--warning { background: #fbebe6; border-color: #d49b94; }
 .context-access > strong { color: var(--forest); font-size: 12px; }
 .context-access > p { margin: 0; color: #65675f; font-size: 11px; line-height: 1.65; }
+.context-access--warning > strong, .context-access--warning > p { color: #7d2f35; }
 .context-access > small { color: #77776f; font-size: 10px; line-height: 1.55; }
 .context-access > button { align-self: flex-start; }
 .settings-field > span { color: #52564f; font-size: 10px; font-weight: 700; }

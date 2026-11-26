@@ -346,8 +346,16 @@ impl ContextTree for AxReader {
     }
 }
 
-pub(super) fn read_window_context(pid: u32, bounds: WindowBounds) -> Result<String, String> {
-    if unsafe { AXIsProcessTrusted() } == 0 {
+pub(super) fn accessibility_granted() -> bool {
+    unsafe { AXIsProcessTrusted() != 0 }
+}
+
+pub(super) fn read_window_context(
+    pid: u32,
+    bounds: WindowBounds,
+    accessibility_granted: bool,
+) -> Result<String, String> {
+    if !accessibility_granted {
         return Err(PERMISSION_HELP.into());
     }
     let pid = c_int::try_from(pid).map_err(|_| "Codex 进程编号无效".to_owned())?;
@@ -399,17 +407,16 @@ mod tests {
 
     #[test]
     fn missing_permission_returns_help_without_prompting_or_panicking() {
-        if unsafe { AXIsProcessTrusted() } == 0 {
-            let result = read_window_context(
-                std::process::id(),
-                WindowBounds {
-                    left: 0,
-                    top: 0,
-                    width: 400,
-                    height: 300,
-                },
-            );
-            assert_eq!(result.unwrap_err(), PERMISSION_HELP);
-        }
+        let result = read_window_context(
+            std::process::id(),
+            WindowBounds {
+                left: 0,
+                top: 0,
+                width: 400,
+                height: 300,
+            },
+            false,
+        );
+        assert_eq!(result.unwrap_err(), PERMISSION_HELP);
     }
 }
